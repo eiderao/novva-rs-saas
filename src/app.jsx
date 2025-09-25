@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from './context/authcontext';
-import LoginPage from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import LoginPage from './pages/login';
+import Dashboard from './pages/dashboard';
 
 function App() {
     const { currentUser } = useAuth();
