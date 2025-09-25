@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React from 'react';
 import { supabase } from '../supabase/client'; // Importa nosso novo cliente Supabase
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authcontext';
 import { Box, Button, Typography, Container, AppBar, Toolbar } from '@mui/material';
 
 const Dashboard = () => {
