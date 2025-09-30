@@ -1,42 +1,37 @@
-// src/pages/Dashboard.jsx (Versão com sintaxe JSX 100% corrigida)
+// src/pages/Dashboard.jsx (Versão Final e Corrigida)
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { useAuth } from '../context/AuthContext';
 import CreateJobModal from '../components/jobs/CreateJobModal';
-
 import { 
-    Box, 
-    Button, 
-    Typography, 
-    Container, 
-    AppBar, 
-    Toolbar, 
-    CircularProgress, 
-    Table, 
-    TableBody, 
-    TableCell, 
-    TableHead, 
-    TableRow, 
-    Paper 
+    Box, Button, Typography, Container, AppBar, Toolbar, CircularProgress, 
+    Table, TableBody, TableCell, TableHead, TableRow, Paper 
 } from '@mui/material';
 
 const Dashboard = () => {
+    const navigate = useNavigate();
     const { currentUser } = useAuth();
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [openCreateModal, setOpenCreateModal] = useState(false);
 
+    // 1. A função fetchJobs é declarada fora do useEffect, no escopo do componente
     const fetchJobs = useCallback(async () => {
-        if (!currentUser) return;
-        setLoading(true);
+        if (!currentUser) {
+            setLoading(false);
+            return;
+        }
+        
+        // Note que não precisamos de setLoading(true) aqui, pois o useEffect já cuida disso
         setError('');
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Sessão do usuário não encontrada.");
-
+            
             const response = await fetch('/api/getJobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-
+            
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Falha ao buscar vagas do servidor.');
@@ -50,14 +45,20 @@ const Dashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentUser]);
+    }, [currentUser]); // A função depende apenas do currentUser
 
+    // 2. O useEffect é usado para chamar a função na primeira renderização
     useEffect(() => {
+        setLoading(true); // Controlamos o loading inicial aqui
         fetchJobs();
-    }, [fetchJobs]);
+    }, [fetchJobs]); // E ele depende da função fetchJobs
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
+    };
+
+    const handleRowClick = (jobId) => {
+      navigate(`/vaga/${jobId}`);
     };
 
     return (
@@ -102,7 +103,12 @@ const Dashboard = () => {
                                 </TableHead>
                                 <TableBody>
                                     {jobs.length > 0 ? jobs.map((job) => (
-                                        <TableRow hover key={job.id}>
+                                        <TableRow 
+                                            hover 
+                                            key={job.id} 
+                                            onClick={() => handleRowClick(job.id)}
+                                            sx={{ cursor: 'pointer' }}
+                                        >
                                             <TableCell>{job.title}</TableCell>
                                             <TableCell>{job.status}</TableCell>
                                             <TableCell align="center">{job.candidateCount || 0}</TableCell>
@@ -120,12 +126,11 @@ const Dashboard = () => {
                     )}
                 </Container>
             </Box>
+            {/* 3. Agora o onJobCreated consegue encontrar e chamar a função fetchJobs */}
             <CreateJobModal 
                 open={openCreateModal}
                 handleClose={() => setOpenCreateModal(false)}
-                onJobCreated={() => {
-                    fetchJobs();
-                }}
+                onJobCreated={fetchJobs}
             />
         </>
     );
