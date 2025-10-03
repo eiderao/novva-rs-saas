@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import JobDetails from './pages/JobDetails.jsx';
 import ApplyPage from './pages/ApplyPage.jsx'; // <-- IMPORTAÇÃO DA NOVA PÁGINA
 import LoadingSpinner from './components/common/LoadingSpinner.jsx';
+import ApplicationDetails from './pages/ApplicationDetails.jsx';
 
 // Um componente para agrupar nossas rotas protegidas
 const ProtectedRoutes = () => (
@@ -15,6 +16,7 @@ const ProtectedRoutes = () => (
     <Route path="/" element={<Dashboard />} />
     <Route path="/vaga/:jobId" element={<JobDetails />} />
     {/* Futuras rotas protegidas virão aqui */}
+    <Route path="/vaga/:jobId/candidato/:applicationId" element={<ApplicationDetails />} />
   </Routes>
 );
 
