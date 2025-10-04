@@ -1,12 +1,50 @@
-// src/pages/ApplicationDetails.jsx (Versão Final com Campos Ordenados e Traduzidos)
+// src/pages/ApplicationDetails.jsx (Versão Final com Formulário de Avaliação)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { format, parseISO } from 'date-fns';
 import { 
     Container, Typography, Box, AppBar, Toolbar, Button, CircularProgress, 
-    Alert, Paper, Grid, Link, Divider, List, ListItem, ListItemText
+    Alert, Paper, Grid, Link, Divider, List, ListItem, ListItemText,
+    FormControl, InputLabel, Select, MenuItem, TextField
 } from '@mui/material';
+
+// Componente reutilizável para uma seção da avaliação
+const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = {}, onEvaluationChange, onNotesChange }) => {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+      <Typography variant="h6">{title}</Typography>
+      {criteria.map((criterion, index) => (
+        <Box key={index} sx={{ mt: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
+            <Select
+              value={evaluationData[criterion.name] || ''}
+              label={`${criterion.name} (Peso: ${criterion.weight}%)`}
+              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, e.target.value)}
+              variant="standard"
+            >
+              {notes.map((note, noteIndex) => (
+                <MenuItem key={noteIndex} value={note.valor}>{note.nome} ({note.valor})</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      ))}
+      <TextField
+        label="Anotações"
+        multiline
+        rows={3}
+        fullWidth
+        variant="standard"
+        sx={{ mt: 2 }}
+        value={evaluationData.anotacoes || ''}
+        onChange={(e) => onNotesChange(title.toLowerCase(), e.target.value)}
+      />
+    </Paper>
+  );
+};
+
 
 const ApplicationDetails = () => {
   const { jobId, applicationId } = useParams();
@@ -15,65 +53,73 @@ const ApplicationDetails = () => {
   const [error, setError] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
 
+  // Estado para guardar os dados da avaliação
+  const [evaluation, setEvaluation] = useState({
+    triagem: {},
+    cultura: {},
+    tecnico: {},
+  });
+
   useEffect(() => {
     const fetchDetails = async () => {
-      if (!applicationId) {
-        setError("ID da candidatura não encontrado.");
-        setLoading(false);
-        return;
-      }
+      if (!applicationId) { setError("ID da candidatura não encontrado."); setLoading(false); return; }
       setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Sessão não encontrada.");
-
-        const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, {
-          headers: { 'Authorization': `Bearer ${session.access_token}` },
-        });
-        if (!appResponse.ok) {
-          const errorData = await appResponse.json();
-          throw new Error(errorData.error || "Não foi possível buscar os detalhes da candidatura.");
-        }
+        const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+        if (!appResponse.ok) { const errorData = await appResponse.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes."); }
         const appData = await appResponse.json();
         
         if (appData.application) {
           setApplication(appData.application);
+          // Se já houver uma avaliação salva, preenchemos o estado com ela.
+          if (appData.application.evaluation) {
+            setEvaluation(appData.application.evaluation);
+          }
 
           const filePath = appData.application.resumeUrl;
           if (filePath) {
-            const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, {
-              headers: { 'Authorization': `Bearer ${session.access_token}` },
-            });
-            if (!urlResponse.ok) {
-              throw new Error("Não foi possível gerar o link do currículo.");
-            }
+            const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+            if (!urlResponse.ok) { throw new Error("Não foi possível gerar o link do currículo."); }
             const urlData = await urlResponse.json();
             setResumeUrl(urlData.signedUrl);
           }
         } else {
           throw new Error("Dados da candidatura recebidos são inválidos.");
         }
-      } catch (err) {
-        console.error("Erro ao carregar detalhes:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error("Erro ao carregar detalhes:", err); setError(err.message); } 
+      finally { setLoading(false); }
     };
-
     fetchDetails();
   }, [applicationId]);
   
+  // Handler para atualizar o estado da avaliação
+  const handleEvaluationChange = (section, criterionName, value) => {
+    setEvaluation(prevEval => ({
+      ...prevEval,
+      [section]: {
+        ...prevEval[section],
+        [criterionName]: value,
+      }
+    }));
+  };
+
+  const handleNotesChange = (section, text) => {
+    setEvaluation(prevEval => ({
+        ...prevEval,
+        [section]: {
+          ...prevEval[section],
+          anotacoes: text,
+        }
+    }));
+  };
+  
   const renderContent = () => {
-    if (loading) {
-      return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>;
-    }
-    if (error) {
-      return <Alert severity="error">{error}</Alert>;
-    }
+    if (loading) { return <CircularProgress />; }
+    if (error) { return <Alert severity="error">{error}</Alert>; }
     if (application) {
-      const { candidate, formData } = application;
-      
+      const { candidate, job, formData } = application;
       const displayFields = [
         { key: 'preferredName', label: 'Como prefere ser chamado?' },
         { key: 'birthDate', label: 'Data de Nascimento', format: (dateStr) => dateStr ? format(parseISO(dateStr), 'dd/MM/yyyy') : 'Não informado' },
@@ -101,13 +147,10 @@ const ApplicationDetails = () => {
               {formData.linkedinProfile && <Link href={formData.linkedinProfile} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
               {formData.githubProfile && <Link href={formData.githubProfile} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
               <Box mt={2}>
-                <Button variant="contained" href={resumeUrl} target="_blank" disabled={!resumeUrl}>
-                  Ver Currículo
-                </Button>
+                <Button variant="contained" href={resumeUrl} target="_blank" disabled={!resumeUrl}> Ver Currículo </Button>
               </Box>
             </Paper>
           </Grid>
-
           <Grid item xs={12} md={8}>
             <Paper sx={{ p: 2, mb: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>Respostas do Formulário</Typography>
@@ -117,11 +160,7 @@ const ApplicationDetails = () => {
                   if (value) {
                     return (
                       <ListItem key={field.key} sx={{pl: 0}}>
-                        <ListItemText 
-                          primaryTypographyProps={{ fontWeight: 'bold' }} 
-                          primary={field.label} 
-                          secondary={field.format ? field.format(value) : (value || 'Não informado')} 
-                        />
+                        <ListItemText primaryTypographyProps={{ fontWeight: 'bold' }} primary={field.label} secondary={field.format ? field.format(value) : (value || 'Não informado')} />
                       </ListItem>
                     );
                   }
@@ -130,11 +169,15 @@ const ApplicationDetails = () => {
               </List>
             </Paper>
           </Grid>
-
            <Grid item xs={12}>
              <Paper sx={{ p: 2, mt: 2 }}>
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
-                <Typography>A interface para avaliar o candidato com os parâmetros da vaga aparecerá aqui.</Typography>
+                <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                <EvaluationSection title="Cultura" criteria={job.parameters.cultura} notes={job.parameters.notas} evaluationData={evaluation.cultura} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                <EvaluationSection title="Técnico" criteria={job.parameters.tecnico} notes={job.parameters.notas} evaluationData={evaluation.tecnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button variant="contained" size="large">Salvar Avaliação</Button>
+                </Box>
               </Paper>
            </Grid>
         </Grid>
