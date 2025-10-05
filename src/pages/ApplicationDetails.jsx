@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (Versão Final com correção do tipo de dado da nota)
+// src/pages/ApplicationDetails.jsx (Versão Final, Auditada e Corrigida)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -20,6 +20,7 @@ const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = 
             <Select
               value={evaluationData[criterion.name] ?? ''}
               label={`${criterion.name} (Peso: ${criterion.weight}%)`}
+              // A CORREÇÃO CRÍTICA: Convertemos o valor do evento para NÚMERO
               onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}
               variant="standard"
             >
@@ -74,7 +75,6 @@ const ApplicationDetails = () => {
                 tecnico: { ...prev.tecnico, ...appData.application.evaluation.tecnico },
             }));
           }
-
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -206,7 +206,9 @@ const ApplicationDetails = () => {
         {renderContent()}
       </Container>
       <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
+          {feedback.message}
+        </Alert>
       </Snackbar>
     </Box>
   );
