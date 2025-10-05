@@ -1,23 +1,48 @@
-// src/pages/ApplicationDetails.jsx (Versão Final com Layout Aprimorado e Correção de Link)
+// src/pages/ApplicationDetails.jsx (Versão Final com Salvamento de Avaliação)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { format, parseISO } from 'date-fns';
 import { 
     Container, Typography, Box, AppBar, Toolbar, Button, CircularProgress, 
-    Alert, Paper, Grid, Link, Divider
+    Alert, Paper, Grid, Link, Divider, List, ListItem, ListItemText,
+    FormControl, InputLabel, Select, MenuItem, TextField, Snackbar
 } from '@mui/material';
 
-// Movi o componente de Avaliação para fora para manter o código organizado
-// A sua lógica interna não muda
 const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = {}, onEvaluationChange, onNotesChange }) => {
-    return (
-        <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-          {/* ...código do EvaluationSection que já funciona... */}
-        </Paper>
-      );
+  return (
+    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+      <Typography variant="h6">{title}</Typography>
+      {criteria.map((criterion, index) => (
+        <Box key={index} sx={{ mt: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
+            <Select
+              value={evaluationData[criterion.name] || ''}
+              label={`${criterion.name} (Peso: ${criterion.weight}%)`}
+              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, e.target.value)}
+              variant="standard"
+            >
+              {notes.map((note, noteIndex) => (
+                <MenuItem key={noteIndex} value={note.valor}>{note.nome} ({note.valor})</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      ))}
+      <TextField
+        label="Anotações"
+        multiline
+        rows={3}
+        fullWidth
+        variant="standard"
+        sx={{ mt: 2 }}
+        value={evaluationData.anotacoes || ''}
+        onChange={(e) => onNotesChange(title.toLowerCase(), e.target.value)}
+      />
+    </Paper>
+  );
 };
-
 
 const ApplicationDetails = () => {
   const { jobId, applicationId } = useParams();
@@ -25,7 +50,9 @@ const ApplicationDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
-  const [evaluation, setEvaluation] = useState({ triagem: {}, cultura: {}, tecnico: {} });
+  const [evaluation, setEvaluation] = useState({ triagem: {anotacoes: ''}, cultura: {anotacoes: ''}, tecnico: {anotacoes: ''} });
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -37,10 +64,18 @@ const ApplicationDetails = () => {
         const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (!appResponse.ok) { const errorData = await appResponse.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes."); }
         const appData = await appResponse.json();
-        
+
         if (appData.application) {
           setApplication(appData.application);
-          if (appData.application.evaluation) { setEvaluation(appData.application.evaluation); }
+          if (appData.application.evaluation) {
+            // Garante que o estado de avaliação seja mesclado com a estrutura padrão para evitar erros
+            setEvaluation(prev => ({
+                triagem: { ...prev.triagem, ...appData.application.evaluation.triagem },
+                cultura: { ...prev.cultura, ...appData.application.evaluation.cultura },
+                tecnico: { ...prev.tecnico, ...appData.application.evaluation.tecnico },
+            }));
+          }
+
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -54,39 +89,51 @@ const ApplicationDetails = () => {
     };
     fetchDetails();
   }, [applicationId]);
-  
-  const handleEvaluationChange = (section, criterionName, value) => { /* ... */ };
-  const handleNotesChange = (section, text) => { /* ... */ };
-  
-  // FUNÇÃO CORRIGIDA para formatar URLs externas
-  const formatUrl = (url) => {
-    if (!url) return '#';
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
+
+  const handleEvaluationChange = (section, criterionName, value) => {
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], [criterionName]: value } }));
+  };
+  const handleNotesChange = (section, text) => {
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
+  };
+  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
+
+  const handleSaveEvaluation = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Você não está autenticado.");
+      const response = await fetch('/api/saveEvaluation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ applicationId: applicationId, evaluation: evaluation }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Não foi possível salvar a avaliação.");
+      }
+      setFeedback({ open: true, message: 'Avaliação salva com sucesso!', severity: 'success' });
+    } catch (err) {
+      console.error("Erro ao salvar avaliação:", err);
+      setFeedback({ open: true, message: err.message, severity: 'error' });
+    } finally {
+      setIsSaving(false);
     }
-    return `//${url}`;
   };
 
   const renderContent = () => {
-    if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
+    if (loading) { return <CircularProgress />; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
     if (application) {
       const { candidate, job, formData } = application;
-      
       const displayFields = [
-        { key: 'preferredName', label: 'Como prefere ser chamado?' },
-        { key: 'birthDate', label: 'Data de Nascimento', format: (dateStr) => dateStr ? format(parseISO(dateStr), 'dd/MM/yyyy') : 'Não informado' },
-        { key: 'state', label: 'Estado' },
-        { key: 'city', label: 'Cidade' },
+        { key: 'preferredName', label: 'Como prefere ser chamado?' }, { key: 'birthDate', label: 'Data de Nascimento', format: (dateStr) => dateStr ? format(parseISO(dateStr), 'dd/MM/yyyy') : 'Não informado' },
+        { key: 'state', label: 'Estado' }, { key: 'city', label: 'Cidade' },
         { key: 'hasGraduated', label: 'Concluiu curso superior?', format: (val) => val === 'sim' ? 'Sim, já concluí' : 'Não, estou cursando' },
-        { key: 'studyPeriod', label: 'Período que estuda' },
-        { key: 'course', label: 'Curso' },
-        { key: 'institution', label: 'Instituição' },
-        { key: 'completionYear', label: 'Ano de Conclusão' },
-        { key: 'englishLevel', label: 'Nível de Inglês' },
-        { key: 'spanishLevel', label: 'Nível de Espanhol' },
-        { key: 'source', label: 'Como soube da vaga?' },
-        { key: 'motivation', label: 'Motivação' },
+        { key: 'studyPeriod', label: 'Período que estuda' }, { key: 'course', label: 'Curso' },
+        { key: 'institution', label: 'Instituição' }, { key: 'completionYear', label: 'Ano de Conclusão' },
+        { key: 'englishLevel', label: 'Nível de Inglês' }, { key: 'spanishLevel', label: 'Nível de Espanhol' },
+        { key: 'source', label: 'Como soube da vaga?' }, { key: 'motivation', label: 'Motivação' },
       ];
 
       return (
@@ -97,11 +144,9 @@ const ApplicationDetails = () => {
               <Typography variant="body1" sx={{ wordBreak: 'break-all' }}><strong>E-mail:</strong> {candidate.email}</Typography>
               <Typography variant="body1"><strong>Telefone:</strong> {candidate.phone || 'Não informado'}</Typography>
               <Divider sx={{ my: 2 }} />
-              {formData.linkedinProfile && <Link href={formatUrl(formData.linkedinProfile)} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
-              {formData.githubProfile && <Link href={formatUrl(formData.githubProfile)} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
-              <Box mt={2}>
-                <Button variant="contained" href={resumeUrl} target="_blank" disabled={!resumeUrl}> Ver Currículo </Button>
-              </Box>
+              {formData.linkedinProfile && <Link href={formData.linkedinProfile} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
+              {formData.githubProfile && <Link href={formData.githubProfile} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
+              <Box mt={2}><Button variant="contained" href={resumeUrl} target="_blank" disabled={!resumeUrl}> Ver Currículo </Button></Box>
             </Paper>
           </Grid>
           <Grid item xs={12} md={8}>
@@ -114,9 +159,7 @@ const ApplicationDetails = () => {
                     return (
                       <Grid item xs={12} sm={6} key={field.key}>
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{field.label}</Typography>
-                        <Typography variant="body1">
-                          {field.format ? field.format(value) : (value || 'Não informado')}
-                        </Typography>
+                        <Typography variant="body1">{field.format ? field.format(value) : (value || 'Não informado')}</Typography>
                       </Grid>
                     );
                   }
@@ -126,16 +169,18 @@ const ApplicationDetails = () => {
             </Paper>
           </Grid>
           <Grid item xs={12}>
-             <Paper sx={{ p: 2, mt: 2 }}>
+            <Paper sx={{ p: 2, mt: 2 }}>
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
                 <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <EvaluationSection title="Cultura" criteria={job.parameters.cultura} notes={job.parameters.notas} evaluationData={evaluation.cultura} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <EvaluationSection title="Técnico" criteria={job.parameters.tecnico} notes={job.parameters.notas} evaluationData={evaluation.tecnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button variant="contained" size="large">Salvar Avaliação</Button>
+                  <Button variant="contained" size="large" onClick={handleSaveEvaluation} disabled={isSaving}>
+                    {isSaving ? <CircularProgress size={24} color="inherit"/> : 'Salvar Avaliação'}
+                  </Button>
                 </Box>
               </Paper>
-           </Grid>
+          </Grid>
         </Grid>
       );
     }
@@ -149,14 +194,15 @@ const ApplicationDetails = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {application ? `Candidato: ${application.candidate.name}` : 'Carregando Candidatura...'}
           </Typography>
-          <Button color="inherit" component={RouterLink} to={`/vaga/${jobId}`}>
-            Voltar para a Vaga
-          </Button>
+          <Button color="inherit" component={RouterLink} to={`/vaga/${jobId}`}> Voltar para a Vaga </Button>
         </Toolbar>
       </AppBar>
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert>
+      </Snackbar>
     </Box>
   );
 };
