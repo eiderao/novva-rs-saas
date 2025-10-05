@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (Versão Final com correção do "bug do zero")
+// src/pages/ApplicationDetails.jsx (Versão Final com correção do tipo de dado da nota)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -20,7 +20,7 @@ const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = 
             <Select
               value={evaluationData[criterion.name] ?? ''}
               label={`${criterion.name} (Peso: ${criterion.weight}%)`}
-              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, e.target.value)}
+              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}
               variant="standard"
             >
               {notes.map((note, noteIndex) => (
@@ -74,6 +74,7 @@ const ApplicationDetails = () => {
                 tecnico: { ...prev.tecnico, ...appData.application.evaluation.tecnico },
             }));
           }
+
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -95,6 +96,7 @@ const ApplicationDetails = () => {
     setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
   };
   const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
+
   const handleSaveEvaluation = async () => {
     setIsSaving(true);
     try {
@@ -204,9 +206,7 @@ const ApplicationDetails = () => {
         {renderContent()}
       </Container>
       <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
-          {feedback.message}
-        </Alert>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert>
       </Snackbar>
     </Box>
   );
