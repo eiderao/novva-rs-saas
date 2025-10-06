@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (VERSÃO FINAL E CORRIGIDA)
+// src/pages/ApplicationDetails.jsx (VERSÃO FINAL, SIMPLIFICADA E AUDITADA)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -9,52 +9,13 @@ import {
     FormControl, InputLabel, Select, MenuItem, TextField, Snackbar
 } from '@mui/material';
 
-const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = {}, onEvaluationChange, onNotesChange }) => {
-  return (
-    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-      <Typography variant="h6">{title}</Typography>
-      {criteria.map((criterion, index) => (
-        <Box key={`${title}-${index}`} sx={{ mt: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
-            <Select
-              // GARANTE que o valor seja um número ou string vazia
-              value={typeof evaluationData[criterion.name] === 'number' ? evaluationData[criterion.name] : ''}
-              label={`${criterion.name} (Peso: ${criterion.weight}%)`}
-              // GARANTE que o valor enviado seja sempre um número
-              onChange={(e) => {
-                debugger;
-                onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}}
-              variant="standard"
-            >
-              {notes.map((note, noteIndex) => (
-                <MenuItem key={noteIndex} value={note.valor}>{note.nome} ({note.valor})</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      ))}
-      <TextField
-        label="Anotações"
-        multiline
-        rows={3}
-        fullWidth
-        variant="standard"
-        sx={{ mt: 2 }}
-        value={evaluationData.anotacoes || ''}
-        onChange={(e) => onNotesChange(title.toLowerCase(), e.target.value)}
-      />
-    </Paper>
-  );
-};
-
 const ApplicationDetails = () => {
   const { jobId, applicationId } = useParams();
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
-  const [evaluation, setEvaluation] = useState({ triagem: {anotacoes: ''}, cultura: {anotacoes: ''}, tecnico: {anotacoes: ''} });
+  const [evaluation, setEvaluation] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   
@@ -68,16 +29,9 @@ const ApplicationDetails = () => {
         const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (!appResponse.ok) { const errorData = await appResponse.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes."); }
         const appData = await appResponse.json();
-        
         if (appData.application) {
           setApplication(appData.application);
-          if (appData.application.evaluation) {
-            setEvaluation(prev => ({
-                triagem: { ...prev.triagem, ...appData.application.evaluation.triagem },
-                cultura: { ...prev.cultura, ...appData.application.evaluation.cultura },
-                tecnico: { ...prev.tecnico, ...appData.application.evaluation.tecnico },
-            }));
-          }
+          setEvaluation(appData.application.evaluation || { triagem: {anotacoes: ''}, cultura: {anotacoes: ''}, tecnico: {anotacoes: ''} });
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -92,13 +46,6 @@ const ApplicationDetails = () => {
     fetchDetails();
   }, [applicationId]);
   
-  const handleEvaluationChange = (section, criterionName, value) => {
-    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], [criterionName]: value } }));
-  };
-  const handleNotesChange = (section, text) => {
-    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
-  };
-  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
   const handleSaveEvaluation = async () => {
     setIsSaving(true);
     try {
@@ -131,7 +78,7 @@ const ApplicationDetails = () => {
   const renderContent = () => {
     if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
-    if (application) {
+    if (application && evaluation) {
       const { candidate, job, formData } = application;
       const displayFields = [
         { key: 'preferredName', label: 'Como prefere ser chamado?' }, { key: 'birthDate', label: 'Data de Nascimento', format: (dateStr) => dateStr ? format(parseISO(dateStr), 'dd/MM/yyyy') : 'Não informado' },
@@ -178,9 +125,52 @@ const ApplicationDetails = () => {
           <Grid item xs={12}>
              <Paper sx={{ p: 2, mt: 2 }}>
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
-                <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
-                <EvaluationSection title="Cultura" criteria={job.parameters.cultura} notes={job.parameters.notas} evaluationData={evaluation.cultura} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
-                <EvaluationSection title="Técnico" criteria={job.parameters.tecnico} notes={job.parameters.notas} evaluationData={evaluation.tecnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                
+                {['triagem', 'cultura', 'tecnico'].map(section => (
+                  <Paper key={section} variant="outlined" sx={{ p: 2, mt: 2 }}>
+                    <Typography variant="h6" sx={{textTransform: 'capitalize'}}>{section}</Typography>
+                    {job.parameters[section]?.map(criterion => (
+                      <Box key={criterion.name} sx={{ mt: 2 }}>
+                        <FormControl fullWidth>
+                          <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
+                          <Select
+                            value={evaluation[section]?.[criterion.name] ?? ''}
+                            label={`${criterion.name} (Peso: ${criterion.weight}%)`}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEvaluation(prev => ({
+                                ...prev,
+                                [section]: { ...prev[section], [criterion.name]: value === '' ? '' : Number(value) }
+                              }));
+                            }}
+                            variant="standard"
+                          >
+                            {job.parameters.notas.map(note => (
+                              <MenuItem key={note.nome} value={note.valor}>{note.nome} ({note.valor})</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+                    ))}
+                    <TextField
+                      label="Anotações"
+                      multiline
+                      rows={3}
+                      fullWidth
+                      variant="standard"
+                      sx={{ mt: 2 }}
+                      value={evaluation[section]?.anotacoes || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setEvaluation(prev => ({
+                          ...prev,
+                          [section]: { ...prev[section], anotacoes: value }
+                        }));
+                      }}
+                    />
+                  </Paper>
+                ))}
+                
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                   <Button variant="contained" size="large" onClick={handleSaveEvaluation} disabled={isSaving}>
                     {isSaving ? <CircularProgress size={24} color="inherit"/> : 'Salvar Avaliação'}
@@ -207,8 +197,8 @@ const ApplicationDetails = () => {
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
-      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={() => setFeedback({open: false, message: ''})}>
+        <Alert onClose={() => setFeedback({open: false, message: ''})} severity={feedback.severity} sx={{ width: '100%' }}>
           {feedback.message}
         </Alert>
       </Snackbar>
