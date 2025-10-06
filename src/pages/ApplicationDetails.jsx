@@ -22,7 +22,9 @@ const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = 
               value={typeof evaluationData[criterion.name] === 'number' ? evaluationData[criterion.name] : ''}
               label={`${criterion.name} (Peso: ${criterion.weight}%)`}
               // GARANTE que o valor enviado seja sempre um número
-              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}
+              onChange={(e) => 
+                debugger;
+                onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}
               variant="standard"
             >
               {notes.map((note, noteIndex) => (
