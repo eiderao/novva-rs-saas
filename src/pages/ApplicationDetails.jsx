@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (VERSÃO DE DEPURAÇÃO FINAL)
+// src/pages/ApplicationDetails.jsx (VERSÃO FINAL E CORRIGIDA)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -14,20 +14,15 @@ const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = 
     <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
       <Typography variant="h6">{title}</Typography>
       {criteria.map((criterion, index) => (
-        <Box key={index} sx={{ mt: 2 }}>
+        <Box key={`${title}-${index}`} sx={{ mt: 2 }}>
           <FormControl fullWidth>
             <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
             <Select
-              value={evaluationData[criterion.name] ?? ''}
+              // GARANTE que o valor seja um número ou string vazia
+              value={typeof evaluationData[criterion.name] === 'number' ? evaluationData[criterion.name] : ''}
               label={`${criterion.name} (Peso: ${criterion.weight}%)`}
-              onChange={(e) => {
-                console.group(`[SENSOR #1] Ação no Componente Select (${title})`);
-                console.log(`Critério: ${criterion.name}`);
-                console.log(`Valor bruto do evento (e.target.value):`, e.target.value);
-                console.log(`Tipo do valor bruto:`, typeof e.target.value);
-                console.groupEnd();
-                onEvaluationChange(title.toLowerCase(), criterion.name, e.target.value);
-              }}
+              // GARANTE que o valor enviado seja sempre um número
+              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, Number(e.target.value))}
               variant="standard"
             >
               {notes.map((note, noteIndex) => (
@@ -60,7 +55,7 @@ const ApplicationDetails = () => {
   const [evaluation, setEvaluation] = useState({ triagem: {anotacoes: ''}, cultura: {anotacoes: ''}, tecnico: {anotacoes: ''} });
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
-
+  
   useEffect(() => {
     const fetchDetails = async () => {
       if (!applicationId) { setError("ID da candidatura não encontrado."); setLoading(false); return; }
@@ -71,7 +66,7 @@ const ApplicationDetails = () => {
         const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (!appResponse.ok) { const errorData = await appResponse.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes."); }
         const appData = await appResponse.json();
-
+        
         if (appData.application) {
           setApplication(appData.application);
           if (appData.application.evaluation) {
@@ -81,7 +76,6 @@ const ApplicationDetails = () => {
                 tecnico: { ...prev.tecnico, ...appData.application.evaluation.tecnico },
             }));
           }
-
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -95,39 +89,91 @@ const ApplicationDetails = () => {
     };
     fetchDetails();
   }, [applicationId]);
-
+  
   const handleEvaluationChange = (section, criterionName, value) => {
-    console.group('[SENSOR #2] handleEvaluationChange chamado');
-    console.log(`Recebido: seção=${section}, critério=${criterionName}, valor=${value}`);
-    console.log(`Tipo do valor recebido:`, typeof value);
-    const numericValue = Number(value);
-    console.log(`Valor convertido para número:`, numericValue);
-    console.log(`Tipo do valor convertido:`, typeof numericValue);
-    console.groupEnd();
-
-    setEvaluation(prevEval => {
-      const newState = { ...prevEval, [section]: { ...prevEval[section], [criterionName]: numericValue } };
-      console.group('[SENSOR #3] Novo estado que será salvo');
-      console.log(newState);
-      console.groupEnd();
-      return newState;
-    });
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], [criterionName]: value } }));
+  };
+  const handleNotesChange = (section, text) => {
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
+  };
+  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
+  const handleSaveEvaluation = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Você não está autenticado.");
+      const response = await fetch('/api/saveEvaluation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ applicationId: applicationId, evaluation: evaluation }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Não foi possível salvar a avaliação.");
+      }
+      setFeedback({ open: true, message: 'Avaliação salva com sucesso!', severity: 'success' });
+    } catch (err) {
+      console.error("Erro ao salvar avaliação:", err);
+      setFeedback({ open: true, message: err.message, severity: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const formatUrl = (url) => {
+    if (!url) return '#';
+    if (url.startsWith('http://') || url.startsWith('https://')) { return url; }
+    return `//${url}`;
   };
 
-  const handleNotesChange = (section, text) => { setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } })); };
-  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
-  const handleSaveEvaluation = async () => { /* ... */ };
-  const formatUrl = (url) => { /* ... */ };
-
   const renderContent = () => {
-    if (loading) { return <CircularProgress />; }
+    if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
     if (application) {
       const { candidate, job, formData } = application;
+      const displayFields = [
+        { key: 'preferredName', label: 'Como prefere ser chamado?' }, { key: 'birthDate', label: 'Data de Nascimento', format: (dateStr) => dateStr ? format(parseISO(dateStr), 'dd/MM/yyyy') : 'Não informado' },
+        { key: 'state', label: 'Estado' }, { key: 'city', label: 'Cidade' },
+        { key: 'hasGraduated', label: 'Concluiu curso superior?', format: (val) => val === 'sim' ? 'Sim, já concluí' : 'Não, estou cursando' },
+        { key: 'studyPeriod', label: 'Período que estuda' }, { key: 'course', label: 'Curso' },
+        { key: 'institution', label: 'Instituição' }, { key: 'completionYear', label: 'Ano de Conclusão' },
+        { key: 'englishLevel', label: 'Nível de Inglês' }, { key: 'spanishLevel', label: 'Nível de Espanhol' },
+        { key: 'source', label: 'Como soube da vaga?' }, { key: 'motivation', label: 'Motivação' },
+      ];
+
       return (
         <Grid container spacing={3}>
-          {/* ... Colunas de Info e Respostas ... */}
-           <Grid item xs={12}>
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h5" gutterBottom>{candidate.name}</Typography>
+              <Typography variant="body1" sx={{ wordBreak: 'break-all' }}><strong>E-mail:</strong> {candidate.email}</Typography>
+              <Typography variant="body1"><strong>Telefone:</strong> {candidate.phone || 'Não informado'}</Typography>
+              <Divider sx={{ my: 2 }} />
+              {formData.linkedinProfile && <Link href={formatUrl(formData.linkedinProfile)} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
+              {formData.githubProfile && <Link href={formatUrl(formData.githubProfile)} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
+              <Box mt={2}><Button variant="contained" href={resumeUrl} target="_blank" disabled={!resumeUrl}> Ver Currículo </Button></Box>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 2, height: '100%' }}>
+              <Typography variant="h6" gutterBottom>Respostas do Formulário</Typography>
+              <Grid container spacing={2}>
+                {displayFields.map((field) => {
+                  const value = formData[field.key];
+                  if (value) {
+                    return (
+                      <Grid item xs={12} sm={6} key={field.key}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{field.label}</Typography>
+                        <Typography variant="body1">{field.format ? field.format(value) : (value || 'Não informado')}</Typography>
+                      </Grid>
+                    );
+                  }
+                  return null;
+                })}
+              </Grid>
+            </Paper>
+          </Grid>
+          <Grid item xs={12}>
              <Paper sx={{ p: 2, mt: 2 }}>
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
                 <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
@@ -150,13 +196,19 @@ const ApplicationDetails = () => {
     <Box>
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{application ? `Candidato: ${application.candidate.name}` : 'Carregando Candidatura...'}</Typography>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            {application ? `Candidato: ${application.candidate.name}` : 'Carregando Candidatura...'}
+          </Typography>
           <Button color="inherit" component={RouterLink} to={`/vaga/${jobId}`}> Voltar para a Vaga </Button>
         </Toolbar>
       </AppBar>
-      <Container sx={{ mt: 4 }}>{renderContent()}</Container>
+      <Container sx={{ mt: 4 }}>
+        {renderContent()}
+      </Container>
       <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
+          {feedback.message}
+        </Alert>
       </Snackbar>
     </Box>
   );
