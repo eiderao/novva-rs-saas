@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (VERSÃO FINAL, SIMPLIFICADA E AUDITADA)
+// src/pages/ApplicationDetails.jsx (VERSÃO FINAL, COMPLETA E AUDITADA)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -8,14 +8,75 @@ import {
     Alert, Paper, Grid, Link, Divider, List, ListItem, ListItemText,
     FormControl, InputLabel, Select, MenuItem, TextField, Snackbar
 } from '@mui/material';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
+// O componente de seção de parâmetros, que já está estável.
+const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
+  const handleItemChange = (index, field, value) => { const newCriteria = [...criteria]; const numericValue = field === 'weight' ? Number(value) || 0 : value; newCriteria[index] = { ...newCriteria[index], [field]: numericValue }; onCriteriaChange(newCriteria); };
+  const addCriterion = () => { if (criteria.length < 10) { onCriteriaChange([...criteria, { name: '', weight: 0 }]); } };
+  const removeCriterion = (index) => { const newCriteria = criteria.filter((_, i) => i !== index); onCriteriaChange(newCriteria); };
+  const totalWeight = criteria.reduce((sum, item) => sum + (item.weight || 0), 0);
+  return (
+    <Box sx={{ mt: 2 }}>
+      {criteria.map((item, index) => (
+        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <TextField label={`Critério ${index + 1}`} value={item.name} onChange={(e) => handleItemChange(index, 'name', e.target.value)} fullWidth variant="standard" />
+          <TextField label="Peso (%)" type="number" value={item.weight} onChange={(e) => handleItemChange(index, 'weight', e.target.value)} sx={{ width: '120px' }} variant="standard" />
+          <IconButton onClick={() => removeCriterion(index)} color="error"><DeleteIcon /></IconButton>
+        </Box>
+      ))}
+      <Button startIcon={<AddCircleOutlineIcon />} onClick={addCriterion} disabled={criteria.length >= 10} sx={{ mt: 2 }}>Adicionar Critério</Button>
+      <Typography variant="h6" sx={{ mt: 3, p: 1, borderRadius: 1, bgcolor: totalWeight === 100 ? '#e8f5e9' : '#ffebee', color: totalWeight === 100 ? 'green' : 'red' }}> Soma dos Pesos: {totalWeight}% </Typography>
+    </Box>
+  );
+};
+
+// O componente de seção de avaliação, com a lógica de ID único que você sugeriu.
+const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = {}, onEvaluationChange, onNotesChange }) => {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+      <Typography variant="h6" sx={{textTransform: 'capitalize'}}>{title}</Typography>
+      {criteria.map((criterion) => (
+        <Box key={`${title}-${criterion.name}`} sx={{ mt: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
+            <Select
+              value={evaluationData[criterion.name] || ''}
+              label={`${criterion.name} (Peso: ${criterion.weight}%)`}
+              onChange={(e) => onEvaluationChange(title.toLowerCase(), criterion.name, e.target.value)}
+              variant="standard"
+            >
+              {notes.map((note) => (
+                <MenuItem key={note.id} value={note.id}>{note.nome} ({note.valor})</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      ))}
+      <TextField
+        label="Anotações"
+        multiline
+        rows={3}
+        fullWidth
+        variant="standard"
+        sx={{ mt: 2 }}
+        value={evaluationData.anotacoes || ''}
+        onChange={(e) => onNotesChange(title.toLowerCase(), e.target.value)}
+      />
+    </Paper>
+  );
+};
+
+// O componente principal, com a lógica de estado e carregamento CORRIGIDA.
 const ApplicationDetails = () => {
   const { jobId, applicationId } = useParams();
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
-  const [evaluation, setEvaluation] = useState(null);
+  const [evaluation, setEvaluation] = useState(null); // Corrigido: Inicia como nulo
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   
@@ -29,9 +90,22 @@ const ApplicationDetails = () => {
         const appResponse = await fetch(`/api/getApplicationDetails?applicationId=${applicationId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (!appResponse.ok) { const errorData = await appResponse.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes."); }
         const appData = await appResponse.json();
+        
         if (appData.application) {
           setApplication(appData.application);
-          setEvaluation(appData.application.evaluation || { triagem: {anotacoes: ''}, cultura: {anotacoes: ''}, tecnico: {anotacoes: ''} });
+
+/********************************************************* */
+//          debugger;
+/********************************************************* */          
+
+          // CORREÇÃO: Lógica robusta para carregar a avaliação salva ou criar uma estrutura vazia.
+          const savedEvaluation = appData.application.evaluation;
+          setEvaluation({
+            triagem: savedEvaluation?.triagem || {},
+            cultura: savedEvaluation?.cultura || {},
+            técnico: savedEvaluation?.técnico || {},
+          });
+
           const filePath = appData.application.resumeUrl;
           if (filePath) {
             const urlResponse = await fetch(`/api/getResumeSignedUrl?filePath=${filePath}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
@@ -46,6 +120,14 @@ const ApplicationDetails = () => {
     fetchDetails();
   }, [applicationId]);
   
+  const handleEvaluationChange = (section, criterionName, noteId) => {
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], [criterionName]: noteId } }));
+  };
+  const handleNotesChange = (section, text) => {
+    setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
+  };
+  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
+
   const handleSaveEvaluation = async () => {
     setIsSaving(true);
     try {
@@ -125,52 +207,10 @@ const ApplicationDetails = () => {
           <Grid item xs={12}>
              <Paper sx={{ p: 2, mt: 2 }}>
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
-                
-                {['triagem', 'cultura', 'tecnico'].map(section => (
-                  <Paper key={section} variant="outlined" sx={{ p: 2, mt: 2 }}>
-                    <Typography variant="h6" sx={{textTransform: 'capitalize'}}>{section}</Typography>
-                    {job.parameters[section]?.map(criterion => (
-                      <Box key={criterion.name} sx={{ mt: 2 }}>
-                        <FormControl fullWidth>
-                          <InputLabel>{criterion.name} (Peso: {criterion.weight}%)</InputLabel>
-                          <Select
-                            value={evaluation[section]?.[criterion.name] ?? ''}
-                            label={`${criterion.name} (Peso: ${criterion.weight}%)`}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setEvaluation(prev => ({
-                                ...prev,
-                                [section]: { ...prev[section], [criterion.name]: value === '' ? '' : Number(value) }
-                              }));
-                            }}
-                            variant="standard"
-                          >
-                            {job.parameters.notas.map(note => (
-                              <MenuItem key={note.nome} value={note.valor}>{note.nome} ({note.valor})</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Box>
-                    ))}
-                    <TextField
-                      label="Anotações"
-                      multiline
-                      rows={3}
-                      fullWidth
-                      variant="standard"
-                      sx={{ mt: 2 }}
-                      value={evaluation[section]?.anotacoes || ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setEvaluation(prev => ({
-                          ...prev,
-                          [section]: { ...prev[section], anotacoes: value }
-                        }));
-                      }}
-                    />
-                  </Paper>
-                ))}
-                
+                <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                <EvaluationSection title="Cultura" criteria={job.parameters.cultura} notes={job.parameters.notas} evaluationData={evaluation.cultura} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                {/* CORREÇÃO FINAL: Usando "Técnico" com acento para consistência com o banco e a lógica de estado */}
+                <EvaluationSection title="Técnico" criteria={job.parameters.técnico} notes={job.parameters.notas} evaluationData={evaluation.técnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                   <Button variant="contained" size="large" onClick={handleSaveEvaluation} disabled={isSaving}>
                     {isSaving ? <CircularProgress size={24} color="inherit"/> : 'Salvar Avaliação'}
@@ -197,8 +237,8 @@ const ApplicationDetails = () => {
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
-      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={() => setFeedback({open: false, message: ''})}>
-        <Alert onClose={() => setFeedback({open: false, message: ''})} severity={feedback.severity} sx={{ width: '100%' }}>
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
           {feedback.message}
         </Alert>
       </Snackbar>
