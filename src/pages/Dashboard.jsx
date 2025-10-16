@@ -23,7 +23,7 @@ const Dashboard = () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Sessão do usuário não encontrada.");
-            const response = await fetch('/api/getJobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+            const response = await fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Falha ao buscar vagas do servidor.');

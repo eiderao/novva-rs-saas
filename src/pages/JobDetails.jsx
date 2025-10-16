@@ -52,7 +52,7 @@ const JobDetails = () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Sessão não encontrada.");
-        const response = await fetch(`/api/getJobById?id=${jobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+        const response = await fetch(`/api/jobs?id=${jobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || "Não foi possível buscar os detalhes da vaga."); }
         const data = await response.json();
         if (data.job && data.job.parameters) { setJob(data.job); setParameters(data.job.parameters); } 
