@@ -1,4 +1,4 @@
-// src/pages/ApplicationDetails.jsx (VERSÃO FINAL, COMPLETA E CORRIGIDA)
+// src/pages/ApplicationDetails.jsx (VERSÃO FINAL, COMPLETA E AUDITADA)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -12,10 +12,32 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
+// O componente de seção de parâmetros, que já está estável.
+const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
+  const handleItemChange = (index, field, value) => { const newCriteria = [...criteria]; const numericValue = field === 'weight' ? Number(value) || 0 : value; newCriteria[index] = { ...newCriteria[index], [field]: numericValue }; onCriteriaChange(newCriteria); };
+  const addCriterion = () => { if (criteria.length < 10) { onCriteriaChange([...criteria, { name: '', weight: 0 }]); } };
+  const removeCriterion = (index) => { const newCriteria = criteria.filter((_, i) => i !== index); onCriteriaChange(newCriteria); };
+  const totalWeight = criteria.reduce((sum, item) => sum + (item.weight || 0), 0);
+  return (
+    <Box sx={{ mt: 2 }}>
+      {criteria.map((item, index) => (
+        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <TextField label={`Critério ${index + 1}`} value={item.name} onChange={(e) => handleItemChange(index, 'name', e.target.value)} fullWidth variant="standard" />
+          <TextField label="Peso (%)" type="number" value={item.weight} onChange={(e) => handleItemChange(index, 'weight', e.target.value)} sx={{ width: '120px' }} variant="standard" />
+          <IconButton onClick={() => removeCriterion(index)} color="error"><DeleteIcon /></IconButton>
+        </Box>
+      ))}
+      <Button startIcon={<AddCircleOutlineIcon />} onClick={addCriterion} disabled={criteria.length >= 10} sx={{ mt: 2 }}>Adicionar Critério</Button>
+      <Typography variant="h6" sx={{ mt: 3, p: 1, borderRadius: 1, bgcolor: totalWeight === 100 ? '#e8f5e9' : '#ffebee', color: totalWeight === 100 ? 'green' : 'red' }}> Soma dos Pesos: {totalWeight}% </Typography>
+    </Box>
+  );
+};
+
+// O componente de seção de avaliação, com a lógica de ID único que você sugeriu.
 const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = {}, onEvaluationChange, onNotesChange }) => {
   return (
     <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-      <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{title}</Typography>
+      <Typography variant="h6" sx={{textTransform: 'capitalize'}}>{title}</Typography>
       {criteria.map((criterion) => (
         <Box key={`${title}-${criterion.name}`} sx={{ mt: 2 }}>
           <FormControl fullWidth>
@@ -47,13 +69,14 @@ const EvaluationSection = ({ title, criteria = [], notes = [], evaluationData = 
   );
 };
 
+// O componente principal, com a lógica de estado e carregamento CORRIGIDA.
 const ApplicationDetails = () => {
   const { jobId, applicationId } = useParams();
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resumeUrl, setResumeUrl] = useState('');
-  const [evaluation, setEvaluation] = useState(null);
+  const [evaluation, setEvaluation] = useState(null); // Corrigido: Inicia como nulo
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   
@@ -70,11 +93,17 @@ const ApplicationDetails = () => {
         
         if (appData.application) {
           setApplication(appData.application);
+
+/********************************************************* */
+//          debugger;
+/********************************************************* */          
+
+          // CORREÇÃO: Lógica robusta para carregar a avaliação salva ou criar uma estrutura vazia.
           const savedEvaluation = appData.application.evaluation;
           setEvaluation({
             triagem: savedEvaluation?.triagem || {},
             cultura: savedEvaluation?.cultura || {},
-            tecnico: savedEvaluation?.tecnico || {},
+            técnico: savedEvaluation?.técnico || {},
           });
 
           const filePath = appData.application.resumeUrl;
@@ -97,7 +126,8 @@ const ApplicationDetails = () => {
   const handleNotesChange = (section, text) => {
     setEvaluation(prevEval => ({ ...prevEval, [section]: { ...prevEval[section], anotacoes: text } }));
   };
-  
+  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
+
   const handleSaveEvaluation = async () => {
     setIsSaving(true);
     try {
@@ -127,18 +157,6 @@ const ApplicationDetails = () => {
     return `//${url}`;
   };
 
-  const formatPhone = (phone) => {
-    if (!phone) return 'Não informado';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
-    }
-    if (cleaned.length === 10) {
-      return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 6)}-${cleaned.substring(6)}`;
-    }
-    return phone;
-  };
-
   const renderContent = () => {
     if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
@@ -160,7 +178,7 @@ const ApplicationDetails = () => {
             <Paper sx={{ p: 2, height: '100%' }}>
               <Typography variant="h5" gutterBottom>{candidate.name}</Typography>
               <Typography variant="body1" sx={{ wordBreak: 'break-all' }}><strong>E-mail:</strong> {candidate.email}</Typography>
-              <Typography variant="body1"><strong>Telefone:</strong> {formatPhone(formData.phone)}</Typography>
+              <Typography variant="body1"><strong>Telefone:</strong> {candidate.phone || 'Não informado'}</Typography>
               <Divider sx={{ my: 2 }} />
               {formData.linkedinProfile && <Link href={formatUrl(formData.linkedinProfile)} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
               {formData.githubProfile && <Link href={formatUrl(formData.githubProfile)} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
@@ -191,7 +209,8 @@ const ApplicationDetails = () => {
                 <Typography variant="h5" gutterBottom>Avaliação</Typography>
                 <EvaluationSection title="Triagem" criteria={job.parameters.triagem} notes={job.parameters.notas} evaluationData={evaluation.triagem} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <EvaluationSection title="Cultura" criteria={job.parameters.cultura} notes={job.parameters.notas} evaluationData={evaluation.cultura} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
-                <EvaluationSection title="Técnico" criteria={job.parameters.tecnico} notes={job.parameters.notas} evaluationData={evaluation.tecnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
+                {/* CORREÇÃO FINAL: Usando "Técnico" com acento para consistência com o banco e a lógica de estado */}
+                <EvaluationSection title="Técnico" criteria={job.parameters.técnico} notes={job.parameters.notas} evaluationData={evaluation.técnico} onEvaluationChange={handleEvaluationChange} onNotesChange={handleNotesChange} />
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                   <Button variant="contained" size="large" onClick={handleSaveEvaluation} disabled={isSaving}>
                     {isSaving ? <CircularProgress size={24} color="inherit"/> : 'Salvar Avaliação'}
@@ -204,8 +223,6 @@ const ApplicationDetails = () => {
     }
     return null;
   };
-  
-  const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
 
   return (
     <Box>
