@@ -157,6 +157,18 @@ const ApplicationDetails = () => {
     return `//${url}`;
   };
 
+  const formatPhone = (phone) => {
+  if (!phone) return 'Não informado';
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length === 11) { // Celular com 9 dígitos: (xx) xxxxx-xxxx
+    return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
+  }
+  if (cleaned.length === 10) { // Fixo ou celular antigo: (xx) xxxx-xxxx
+    return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 6)}-${cleaned.substring(6)}`;
+  }
+  return phone; // Retorna o original se não bater com os formatos
+};
+
   const renderContent = () => {
     if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
@@ -178,7 +190,7 @@ const ApplicationDetails = () => {
             <Paper sx={{ p: 2, height: '100%' }}>
               <Typography variant="h5" gutterBottom>{candidate.name}</Typography>
               <Typography variant="body1" sx={{ wordBreak: 'break-all' }}><strong>E-mail:</strong> {candidate.email}</Typography>
-              <Typography variant="body1"><strong>Telefone:</strong> {candidate.phone || 'Não informado'}</Typography>
+              <Typography variant="body1"><strong>Telefone:</strong> {formatPhone(formData.phone)}</Typography>
               <Divider sx={{ my: 2 }} />
               {formData.linkedinProfile && <Link href={formatUrl(formData.linkedinProfile)} target="_blank" rel="noopener" display="block">Perfil no LinkedIn</Link>}
               {formData.githubProfile && <Link href={formatUrl(formData.githubProfile)} target="_blank" rel="noopener" display="block">Perfil no GitHub</Link>}
