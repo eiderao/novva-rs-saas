@@ -1,4 +1,4 @@
-// api/getApplicantsForJob.js (Versão Final e Corrigida)
+// api/getApplicantsForJob.js (Versão Final com Cálculo de Notas)
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(request, response) {
@@ -8,49 +8,89 @@ export default async function handler(request, response) {
       process.env.SUPABASE_SERVICE_KEY
     );
 
-    // 1. Valida o token do usuário de RH
+    // 1. Validação do usuário de RH
     const authHeader = request.headers['authorization'];
     if (!authHeader) return response.status(401).json({ error: 'Não autorizado.' });
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError) return response.status(401).json({ error: 'Token inválido.' });
-
-    // 2. Busca o tenantId do usuário de RH (para segurança)
+    
     const { data: userData } = await supabaseAdmin.from('users').select('tenantId').eq('id', user.id).single();
     if (!userData) return response.status(404).json({ error: 'Perfil de usuário não encontrado.' });
     const tenantId = userData.tenantId;
 
-    // 3. Pega o ID da vaga da URL
     const { jobId } = request.query;
     if (!jobId) return response.status(400).json({ error: 'O ID da vaga é obrigatório.' });
 
-    // 4. VERIFICAÇÃO DE SEGURANÇA: Confirma que a vaga solicitada pertence ao tenant do usuário
-    const { data: jobData, error: jobError } = await supabaseAdmin
+    // 2. Busca a vaga e suas candidaturas de uma só vez
+    const { data: job, error: jobError } = await supabaseAdmin
       .from('jobs')
-      .select('id')
+      .select(`
+        id,
+        tenantId,
+        parameters,
+        applications (
+          id,
+          created_at,
+          evaluation,
+          isHired,
+          candidate:candidates ( id, name, email )
+        )
+      `)
       .eq('id', Number(jobId))
       .eq('tenantId', tenantId)
       .single();
 
-    if (jobError || !jobData) {
+    if (jobError || !job) {
       return response.status(404).json({ error: 'Vaga não encontrada ou não pertence à sua empresa.' });
     }
 
-    // 5. Busca as candidaturas (applications) e os dados dos candidatos (candidates) para a vaga
-    const { data: applications, error: applicationsError } = await supabaseAdmin
-      .from('applications')
-      .select(`
-        id,
-        created_at,
-        candidateId,
-        candidates ( id, name, email )
-      `)
-      .eq('jobId', Number(jobId)); // Usa o ID da vaga convertido para número
+    // 3. Prepara os mapas para cálculo rápido
+    const parameters = job.parameters || {};
+    const notesMap = new Map((parameters.notas || []).map(note => [note.id, note.valor]));
+    const weightsMap = {
+      triagem: new Map((parameters.triagem || []).map(c => [c.name, c.weight])),
+      cultura: new Map((parameters.cultura || []).map(c => [c.name, c.weight])),
+      técnico: new Map((parameters.técnico || []).map(c => [c.name, c.weight])),
+    };
 
-    if (applicationsError) throw applicationsError;
+    // 4. Calcula as notas para cada candidatura
+    const classifiedApplicants = job.applications.map(app => {
+      const scores = { notaTriagem: 0, notaCultura: 0, notaTecnico: 0, notaGeral: 0 };
 
-    // 6. Retorna a lista de candidaturas
-    return response.status(200).json({ applications });
+      if (app.evaluation) {
+        ['triagem', 'cultura', 'técnico'].forEach(section => {
+          let sectionScore = 0;
+          const sectionEvaluation = app.evaluation[section];
+          if (sectionEvaluation) {
+            for (const criterionName in sectionEvaluation) {
+              if (criterionName !== 'anotacoes') {
+                const noteId = sectionEvaluation[criterionName];
+                const noteValue = notesMap.get(noteId) ?? 0;
+                const weight = weightsMap[section]?.get(criterionName) ?? 0;
+                sectionScore += (noteValue * weight) / 100;
+              }
+            }
+          }
+          if (section === 'triagem') scores.notaTriagem = sectionScore;
+          if (section === 'cultura') scores.notaCultura = sectionScore;
+          if (section === 'técnico') scores.notaTecnico = sectionScore;
+        });
+        scores.notaGeral = scores.notaTriagem + scores.notaCultura + scores.notaTecnico;
+      }
+
+      return {
+        applicationId: app.id,
+        submissionDate: app.created_at,
+        isHired: app.isHired,
+        candidateName: app.candidate.name,
+        candidateEmail: app.candidate.email,
+        ...scores
+      };
+    });
+    
+    // 5. Retorna a lista de candidaturas com as notas calculadas
+    return response.status(200).json({ applicants: classifiedApplicants });
 
   } catch (error) {
     console.error("Erro na função getApplicantsForJob:", error);

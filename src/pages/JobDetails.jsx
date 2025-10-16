@@ -1,15 +1,18 @@
-// src/pages/JobDetails.jsx (Versão Final com Nota "N/A" Fixa)
-import React, { useState, useEffect } from 'react';
+// src/pages/JobDetails.jsx (VERSÃO FINAL COMPLETA)
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
+import { format, parseISO } from 'date-fns';
 import { 
     Container, Typography, Box, AppBar, Toolbar, Button, CircularProgress, 
     Alert, Paper, Tabs, Tab, TextField, IconButton, Snackbar, InputAdornment,
-    List, ListItem, ListItemText, Divider, Grid
+    List, ListItem, ListItemText, Divider, Grid,
+    Table, TableHead, TableRow, TableCell, TableBody, Checkbox
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ClassificationChart from '../components/charts/ClassificationChart';
 
 const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
   const handleItemChange = (index, field, value) => { const newCriteria = [...criteria]; const numericValue = field === 'weight' ? Number(value) || 0 : value; newCriteria[index] = { ...newCriteria[index], [field]: numericValue }; onCriteriaChange(newCriteria); };
@@ -40,8 +43,7 @@ const JobDetails = () => {
   const [tabValue, setTabValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
-  const [applicants, setApplicants] = useState([]);
-  const [loadingApplicants, setLoadingApplicants] = useState(true);
+  const [applicantData, setApplicantData] = useState({ loading: true, data: [], error: null });
 
   useEffect(() => {
     const fetchJobDetails = async () => {
@@ -64,30 +66,66 @@ const JobDetails = () => {
   useEffect(() => {
     const fetchApplicants = async () => {
       if (!jobId) return;
-      setLoadingApplicants(true);
+      setApplicantData({ loading: true, data: [], error: null });
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Sessão não encontrada.");
         const response = await fetch(`/api/getApplicantsForJob?jobId=${jobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || "Não foi possível buscar os candidatos."); }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Não foi possível buscar os candidatos.");
+        }
         const data = await response.json();
-        setApplicants(data.applications);
-      } catch (err) { console.error("Erro ao buscar candidatos:", err); } 
-      finally { setLoadingApplicants(false); }
+        setApplicantData({ loading: false, data: data.applicants || [], error: null });
+      } catch (err) {
+        console.error("Erro ao buscar candidatos:", err);
+        setApplicantData({ loading: false, data: [], error: err.message });
+      }
     };
-    if (tabValue === 0) { fetchApplicants(); }
-  }, [jobId, tabValue]);
+    fetchApplicants();
+  }, [jobId]);
+
+  const classifiedApplicants = useMemo(() => {
+    if (!applicantData.data) return [];
+    return [...applicantData.data].sort((a, b) => b.notaGeral - a.notaGeral);
+  }, [applicantData.data]);
+
+  const handleHiredToggle = async (applicationId, currentStatus) => {
+    const newStatus = !currentStatus;
+    setApplicantData(prev => ({
+      ...prev,
+      data: prev.data.map(app => 
+        app.applicationId === applicationId ? { ...app, isHired: newStatus } : app
+      ),
+    }));
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão não encontrada.");
+      await fetch('/api/updateHiredStatus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ applicationId, isHired: newStatus }),
+      });
+    } catch (err) {
+      setFeedback({ open: true, message: 'Erro ao atualizar status.', severity: 'error' });
+      setApplicantData(prev => ({
+        ...prev,
+        data: prev.data.map(app => 
+          app.applicationId === applicationId ? { ...app, isHired: currentStatus } : app
+        ),
+      }));
+    }
+  };
 
   const handleTabChange = (event, newValue) => { setTabValue(newValue); };
   const handleParametersChange = (section, newCriteria) => { setParameters(prevParams => ({ ...prevParams, [section]: newCriteria })); };
-  
   const handleNoteChange = (index, field, value) => {
     const newNotes = [...parameters.notas];
     const numericValue = field === 'valor' ? Number(value) || 0 : value;
     newNotes[index] = { ...newNotes[index], [field]: numericValue };
     setParameters(prevParams => ({ ...prevParams, notas: newNotes }));
   };
-
   const handleSaveParameters = async () => {
     setIsSaving(true);
     try {
@@ -106,7 +144,6 @@ const JobDetails = () => {
       setIsSaving(false);
     }
   };
-  
   const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
   const applicationUrl = `${window.location.origin}/vaga/${jobId}/apply`;
   const handleCopyLink = () => { navigator.clipboard.writeText(applicationUrl); setFeedback({ open: true, message: 'Link copiado!', severity: 'info' }); };
@@ -128,18 +165,19 @@ const JobDetails = () => {
               <Tabs value={tabValue} onChange={handleTabChange}>
                 <Tab label="Candidatos" />
                 <Tab label="Parâmetros" />
+                <Tab label="Classificação" />
               </Tabs>
             </Box>
             <Box p={3} hidden={tabValue !== 0}>
               <Typography variant="h5" gutterBottom>Candidatos Inscritos</Typography>
-              {loadingApplicants ? <CircularProgress /> : (
+              {applicantData.loading ? <CircularProgress /> : applicantData.error ? <Alert severity="error">{applicantData.error}</Alert> : (
                 <List>
-                  {applicants.length > 0 ? applicants.map((app, index) => (
-                    <React.Fragment key={app.id}>
-                      <ListItem button component={RouterLink} to={`/vaga/${jobId}/candidato/${app.id}`}>
-                        <ListItemText primary={app.candidates.name} secondary={app.candidates.email} />
+                  {applicantData.data.length > 0 ? applicantData.data.map((app, index) => (
+                    <React.Fragment key={app.applicationId}>
+                      <ListItem button component={RouterLink} to={`/vaga/${jobId}/candidato/${app.applicationId}`}>
+                        <ListItemText primary={app.candidateName} secondary={app.candidateEmail} />
                       </ListItem>
-                      {index < applicants.length - 1 && <Divider />}
+                      {index < applicantData.data.length - 1 && <Divider />}
                     </React.Fragment>
                   )) : ( <Typography>Nenhum candidato inscrito para esta vaga ainda.</Typography> )}
                 </List>
@@ -147,38 +185,48 @@ const JobDetails = () => {
             </Box>
             <Box p={3} hidden={tabValue !== 1}>
                <Typography variant="h5" gutterBottom>Parâmetros de Avaliação</Typography>
-               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                  <Typography>Critérios de Triagem</Typography>
-                  <ParametersSection criteria={parameters.triagem} onCriteriaChange={(newCriteria) => handleParametersChange('triagem', newCriteria)} />
-               </Paper>
-               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                  <Typography>Cultura</Typography>
-                  <ParametersSection criteria={parameters.cultura} onCriteriaChange={(newCriteria) => handleParametersChange('cultura', newCriteria)} />
-               </Paper>
-               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-                  <Typography>Técnico</Typography>
-                  <ParametersSection criteria={parameters.tecnico} onCriteriaChange={(newCriteria) => handleParametersChange('tecnico', newCriteria)} />
-               </Paper>
-               <Paper variant="outlined" sx={{ p: 2, mt: 3 }}>
-                  <Typography variant="h6" gutterBottom sx={{p: 1}}>Definição de Notas</Typography>
-                  <Grid container spacing={2} sx={{p: 2}}>
-                    {parameters.notas && parameters.notas.map((nota, index) => (
-                      <React.Fragment key={index}>
-                        <Grid item xs={6}>
-                          <TextField label={`Nome da Nota ${index + 1}`} value={nota.nome} onChange={(e) => handleNoteChange(index, 'nome', e.target.value)} fullWidth variant="standard" disabled={nota.nome === 'N/A'} />
-                        </Grid>
-                        <Grid item xs={6}>
-                          <TextField label={`Valor da Nota ${index + 1}`} type="number" value={nota.valor} onChange={(e) => handleNoteChange(index, 'valor', e.target.value)} fullWidth variant="standard" disabled={nota.nome === 'N/A'} />
-                        </Grid>
-                      </React.Fragment>
+               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Critérios de Triagem</Typography><ParametersSection criteria={parameters.triagem} onCriteriaChange={(newCriteria) => handleParametersChange('triagem', newCriteria)} /></Paper>
+               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Cultura</Typography><ParametersSection criteria={parameters.cultura} onCriteriaChange={(newCriteria) => handleParametersChange('cultura', newCriteria)} /></Paper>
+               <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Técnico</Typography><ParametersSection criteria={parameters.técnico} onCriteriaChange={(newCriteria) => handleParametersChange('técnico', newCriteria)} /></Paper>
+               <Paper variant="outlined" sx={{ p: 2, mt: 3 }}><Typography variant="h6" gutterBottom sx={{p: 1}}>Definição de Notas</Typography><Grid container spacing={2} sx={{p: 2}}>{parameters.notas && parameters.notas.map((nota, index) => ( <React.Fragment key={index}><Grid item xs={6}><TextField label={`Nome da Nota ${index + 1}`} value={nota.nome} onChange={(e) => handleNoteChange(index, 'nome', e.target.value)} fullWidth variant="standard" disabled={nota.fixed} /></Grid><Grid item xs={6}><TextField label={`Valor da Nota ${index + 1}`} type="number" value={nota.valor} onChange={(e) => handleNoteChange(index, 'valor', e.target.value)} fullWidth variant="standard" disabled={nota.fixed} /></Grid></React.Fragment> ))}</Grid></Paper>
+               <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}><Button variant="contained" size="large" onClick={handleSaveParameters} disabled={isSaving}>{isSaving ? <CircularProgress size={24} /> : 'Salvar Parâmetros'}</Button></Box>
+            </Box>
+            <Box p={3} hidden={tabValue !== 2}>
+              <Typography variant="h5" gutterBottom>Classificação dos Candidatos</Typography>
+              {applicantData.loading ? null : applicantData.data.length > 0 ? <ClassificationChart data={classifiedApplicants} /> : null}
+              {applicantData.loading ? <CircularProgress sx={{mt: 4}} /> : applicantData.error ? <Alert severity="error">{applicantData.error}</Alert> : (
+                <Table sx={{ mt: 4 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Nome</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Data da Inscrição</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Triagem</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Cultura</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Técnico</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Geral</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Contratado?</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {classifiedApplicants.map(applicant => (
+                      <TableRow hover key={applicant.applicationId} sx={{ backgroundColor: applicant.isHired ? '#e8f5e9' : 'transparent' }}>
+                        <TableCell>{applicant.candidateName}</TableCell>
+                        <TableCell>{format(parseISO(applicant.submissionDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell align="right">{applicant.notaTriagem.toFixed(1)}</TableCell>
+                        <TableCell align="right">{applicant.notaCultura.toFixed(1)}</TableCell>
+                        <TableCell align="right">{applicant.notaTecnico.toFixed(1)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{applicant.notaGeral.toFixed(1)}</TableCell>
+                        <TableCell align="center">
+                          <Checkbox
+                            checked={applicant.isHired || false}
+                            onChange={() => handleHiredToggle(applicant.applicationId, applicant.isHired)}
+                          />
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </Grid>
-               </Paper>
-               <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button variant="contained" size="large" onClick={handleSaveParameters} disabled={isSaving}>
-                    {isSaving ? <CircularProgress size={24} /> : 'Salvar Parâmetros'}
-                  </Button>
-               </Box>
+                  </TableBody>
+                </Table>
+              )}
             </Box>
           </Paper>
         </>
@@ -189,18 +237,9 @@ const JobDetails = () => {
 
   return (
     <Box>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}</Typography>
-          <Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button>
-        </Toolbar>
-      </AppBar>
-      <Container sx={{ mt: 4 }}>
-        {renderContent()}
-      </Container>
-      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert>
-      </Snackbar>
+      <AppBar position="static"><Toolbar><Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}</Typography><Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button></Toolbar></AppBar>
+      <Container sx={{ mt: 4 }}>{renderContent()}</Container>
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}><Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert></Snackbar>
     </Box>
   );
 };
