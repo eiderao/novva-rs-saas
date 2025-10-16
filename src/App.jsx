@@ -1,4 +1,5 @@
 // src/App.jsx
+import HiredPage from './pages/HiredPage.jsx';
 import React from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -16,6 +17,7 @@ const ProtectedRoutes = () => (
     <Route path="/" element={<Dashboard />} />
     <Route path="/vaga/:jobId" element={<JobDetails />} />
     {/* Futuras rotas protegidas virão aqui */}
+    <Route path="/aprovados" element={<HiredPage />} /> {/* <-- NOVA ROTA */}
     <Route path="/vaga/:jobId/candidato/:applicationId" element={<ApplicationDetails />} />
   </Routes>
 );

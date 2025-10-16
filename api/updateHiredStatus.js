@@ -1,4 +1,4 @@
-// api/updateHiredStatus.js
+// api/updateHiredStatus.js (Versão com data de contratação)
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(request, response) {
@@ -12,6 +12,7 @@ export default async function handler(request, response) {
       process.env.SUPABASE_SERVICE_KEY
     );
 
+    // Validação do usuário (sem alterações)
     const authHeader = request.headers['authorization'];
     if (!authHeader) return response.status(401).json({ error: 'Não autorizado.' });
     const token = authHeader.replace('Bearer ', '');
@@ -23,9 +24,16 @@ export default async function handler(request, response) {
       return response.status(400).json({ error: 'applicationId e isHired (booleano) são obrigatórios.' });
     }
 
+    // AQUI ESTÁ A LÓGICA ADITIVA:
+    // Se está contratando, define a data atual. Se está "descontratando", define como nulo.
+    const updateData = {
+      isHired: isHired,
+      hiredAt: isHired ? new Date().toISOString() : null
+    };
+
     const { data, error: updateError } = await supabaseAdmin
       .from('applications')
-      .update({ isHired: isHired })
+      .update(updateData) // Usa o novo objeto de dados
       .eq('id', applicationId)
       .select()
       .single();

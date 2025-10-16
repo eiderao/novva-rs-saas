@@ -1,6 +1,6 @@
-// src/pages/Dashboard.jsx (Versão Final e Corrigida)
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/Dashboard.jsx (Versão com link para Aprovados)
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { useAuth } from '../context/AuthContext';
 import CreateJobModal from '../components/jobs/CreateJobModal';
@@ -17,26 +17,17 @@ const Dashboard = () => {
     const [error, setError] = useState('');
     const [openCreateModal, setOpenCreateModal] = useState(false);
 
-    // 1. A função fetchJobs é declarada fora do useEffect, no escopo do componente
-    const fetchJobs = useCallback(async () => {
-        if (!currentUser) {
-            setLoading(false);
-            return;
-        }
-        
-        // Note que não precisamos de setLoading(true) aqui, pois o useEffect já cuida disso
-        setError('');
+    const fetchJobs = async () => {
+        if (!currentUser) return;
+        setLoading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Sessão do usuário não encontrada.");
-            
             const response = await fetch('/api/getJobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-            
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Falha ao buscar vagas do servidor.');
             }
-            
             const data = await response.json();
             setJobs(data.jobs);
         } catch (err) {
@@ -45,13 +36,11 @@ const Dashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [currentUser]); // A função depende apenas do currentUser
+    };
 
-    // 2. O useEffect é usado para chamar a função na primeira renderização
     useEffect(() => {
-        setLoading(true); // Controlamos o loading inicial aqui
         fetchJobs();
-    }, [fetchJobs]); // E ele depende da função fetchJobs
+    }, [currentUser]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -74,18 +63,30 @@ const Dashboard = () => {
                 </AppBar>
 
                 <Container sx={{ mt: 4 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
                         <Typography variant="h4" component="h1">
                             Painel de Vagas
                         </Typography>
-                        <Button 
-                            variant="contained" 
-                            color="primary" 
-                            size="large"
-                            onClick={() => setOpenCreateModal(true)}
-                        >
-                            Criar Nova Vaga
-                        </Button>
+                        <Box>
+                            <Button 
+                                variant="outlined" 
+                                color="primary" 
+                                size="large"
+                                component={RouterLink}
+                                to="/aprovados"
+                                sx={{ mr: 2 }}
+                            >
+                                Ver Aprovados
+                            </Button>
+                            <Button 
+                                variant="contained" 
+                                color="primary" 
+                                size="large"
+                                onClick={() => setOpenCreateModal(true)}
+                            >
+                                Criar Nova Vaga
+                            </Button>
+                        </Box>
                     </Box>
 
                     {loading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>}
@@ -126,7 +127,6 @@ const Dashboard = () => {
                     )}
                 </Container>
             </Box>
-            {/* 3. Agora o onJobCreated consegue encontrar e chamar a função fetchJobs */}
             <CreateJobModal 
                 open={openCreateModal}
                 handleClose={() => setOpenCreateModal(false)}
