@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx (Versão com link para Aprovados)
+// src/pages/Dashboard.jsx (Versão com API Corrigida)
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import CreateJobModal from '../components/jobs/CreateJobModal';
 import { 
     Box, Button, Typography, Container, AppBar, Toolbar, CircularProgress, 
-    Table, TableBody, TableCell, TableHead, TableRow, Paper 
+    Table, TableBody, TableCell, TableHead, TableRow, Paper, Alert
 } from '@mui/material';
 
 const Dashboard = () => {
@@ -23,6 +23,7 @@ const Dashboard = () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Sessão do usuário não encontrada.");
+            // CORREÇÃO APLICADA AQUI:
             const response = await fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
             if (!response.ok) {
                 const errorData = await response.json();
@@ -42,13 +43,10 @@ const Dashboard = () => {
         fetchJobs();
     }, [currentUser]);
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
-    };
-
-    const handleRowClick = (jobId) => {
-      navigate(`/vaga/${jobId}`);
-    };
+    const handleLogout = async () => { await supabase.auth.signOut(); };
+    const handleRowClick = (jobId) => { navigate(`/vaga/${jobId}`); };
+    
+    const isJobLimitReached = jobs.length >= 2;
 
     return (
         <>
@@ -83,11 +81,18 @@ const Dashboard = () => {
                                 color="primary" 
                                 size="large"
                                 onClick={() => setOpenCreateModal(true)}
+                                disabled={isJobLimitReached}
                             >
                                 Criar Nova Vaga
                             </Button>
                         </Box>
                     </Box>
+
+                    {isJobLimitReached && (
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                            Você atingiu o limite de 2 vagas para o plano freemium.
+                        </Alert>
+                    )}
 
                     {loading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>}
                     {error && <Typography color="error" align="center">Erro: {error}</Typography>}
@@ -104,12 +109,7 @@ const Dashboard = () => {
                                 </TableHead>
                                 <TableBody>
                                     {jobs.length > 0 ? jobs.map((job) => (
-                                        <TableRow 
-                                            hover 
-                                            key={job.id} 
-                                            onClick={() => handleRowClick(job.id)}
-                                            sx={{ cursor: 'pointer' }}
-                                        >
+                                        <TableRow hover key={job.id} onClick={() => handleRowClick(job.id)} sx={{ cursor: 'pointer' }}>
                                             <TableCell>{job.title}</TableCell>
                                             <TableCell>{job.status}</TableCell>
                                             <TableCell align="center">{job.candidateCount || 0}</TableCell>

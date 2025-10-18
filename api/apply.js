@@ -1,24 +1,51 @@
-// api/apply.js (código já estava robusto, apenas confirmando)
+// api/apply.js (Versão com Limite de 3 Candidatos)
 import { createClient } from '@supabase/supabase-js';
 import { formidable } from 'formidable';
 import fs from 'fs';
 import path from 'path';
 
-export const config = { api: { bodyParser: false } };
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export default async function handler(request, response) {
-  // O código que fornecemos anteriormente para este arquivo já é robusto e está correto.
-  // Nenhuma alteração necessária aqui.
+  if (request.method !== 'POST') {
+    return response.status(405).json({ error: 'Método não permitido.' });
+  }
+
   try {
-    const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const supabaseAdmin = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
+
     const form = formidable({});
     const [fields, files] = await form.parse(request);
+    
+    const jobId = fields.jobId ? fields.jobId[0] : null;
+    if (!jobId) {
+      return response.status(400).json({ error: 'ID da vaga é obrigatório.' });
+    }
 
-    const { jobId, name, email, ...otherData } = fields;
+    // --- LÓGICA DE LIMITE ADICIONADA ---
+    const { count, error: countError } = await supabaseAdmin
+      .from('applications')
+      .select('*', { count: 'exact', head: true })
+      .eq('jobId', jobId);
+
+    if (countError) throw countError;
+
+    if (count >= 3) {
+      return response.status(403).json({ error: 'Limite de 3 candidaturas para esta vaga foi atingido.' });
+    }
+    // --- FIM DA LÓGICA DE LIMITE ---
+
+    const { name, email } = fields;
     const resumeFile = files.resume;
-
-    if (!jobId || !name || !email || !resumeFile) {
-      return response.status(400).json({ error: 'Campos obrigatórios faltando.' });
+    if (!name || !email || !resumeFile) {
+      return response.status(400).json({ error: 'Nome, e-mail e currículo são obrigatórios.' });
     }
     
     const fileContent = fs.readFileSync(resumeFile[0].filepath);
@@ -35,7 +62,7 @@ export default async function handler(request, response) {
     if (!candidate) {
       const { data: newCandidate, error: newCandidateError } = await supabaseAdmin
         .from('candidates')
-        .insert({ name: name[0], email: email[0] }) // Adicionando apenas campos essenciais
+        .insert({ name: name[0], email: email[0] })
         .select('id')
         .single();
       if (newCandidateError) throw newCandidateError;
@@ -50,10 +77,10 @@ export default async function handler(request, response) {
     const { error: applicationError } = await supabaseAdmin
       .from('applications')
       .insert({
-        jobId: jobId[0],
+        jobId: jobId,
         candidateId: candidate.id,
         resumeUrl: uploadData.path,
-        formData: applicationFields, // Salva todos os campos como um objeto
+        formData: applicationFields,
       });
     if (applicationError) throw applicationError;
     

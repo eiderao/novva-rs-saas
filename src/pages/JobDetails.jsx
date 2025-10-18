@@ -1,4 +1,4 @@
-// src/pages/JobDetails.jsx (VERSÃO FINAL COMPLETA)
+// src/pages/JobDetails.jsx (COMPLETO E CORRIGIDO)
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -71,16 +71,10 @@ const JobDetails = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("Sessão não encontrada.");
         const response = await fetch(`/api/getApplicantsForJob?jobId=${jobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Não foi possível buscar os candidatos.");
-        }
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || "Não foi possível buscar os candidatos."); }
         const data = await response.json();
         setApplicantData({ loading: false, data: data.applicants || [], error: null });
-      } catch (err) {
-        console.error("Erro ao buscar candidatos:", err);
-        setApplicantData({ loading: false, data: [], error: err.message });
-      }
+      } catch (err) { console.error("Erro ao buscar candidatos:", err); setApplicantData({ loading: false, data: [], error: err.message }); }
     };
     fetchApplicants();
   }, [jobId]);
@@ -89,7 +83,7 @@ const JobDetails = () => {
     if (!applicantData.data) return [];
     return [...applicantData.data].sort((a, b) => b.notaGeral - a.notaGeral);
   }, [applicantData.data]);
-
+  
   const handleHiredToggle = async (applicationId, currentStatus) => {
     const newStatus = !currentStatus;
     setApplicantData(prev => ({
@@ -98,7 +92,6 @@ const JobDetails = () => {
         app.applicationId === applicationId ? { ...app, isHired: newStatus } : app
       ),
     }));
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sessão não encontrada.");
@@ -204,7 +197,7 @@ const JobDetails = () => {
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Cultura</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Técnico</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Geral</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Contratado?</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Escolhido</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>

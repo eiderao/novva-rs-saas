@@ -1,4 +1,4 @@
-// api/getApplicantsForJob.js (Versão Final com Cálculo de Notas)
+// api/getApplicantsForJob.js (VERSÃO FINAL E CORRIGIDA)
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(request, response) {
@@ -8,21 +8,19 @@ export default async function handler(request, response) {
       process.env.SUPABASE_SERVICE_KEY
     );
 
-    // 1. Validação do usuário de RH
+    // Validação do usuário (sem alterações)
     const authHeader = request.headers['authorization'];
     if (!authHeader) return response.status(401).json({ error: 'Não autorizado.' });
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError) return response.status(401).json({ error: 'Token inválido.' });
-    
     const { data: userData } = await supabaseAdmin.from('users').select('tenantId').eq('id', user.id).single();
     if (!userData) return response.status(404).json({ error: 'Perfil de usuário não encontrado.' });
     const tenantId = userData.tenantId;
-
     const { jobId } = request.query;
     if (!jobId) return response.status(400).json({ error: 'O ID da vaga é obrigatório.' });
 
-    // 2. Busca a vaga e suas candidaturas de uma só vez
+    // Busca a vaga e suas candidaturas de uma só vez
     const { data: job, error: jobError } = await supabaseAdmin
       .from('jobs')
       .select(`
@@ -45,7 +43,7 @@ export default async function handler(request, response) {
       return response.status(404).json({ error: 'Vaga não encontrada ou não pertence à sua empresa.' });
     }
 
-    // 3. Prepara os mapas para cálculo rápido
+    // Prepara os mapas para cálculo (sem alterações)
     const parameters = job.parameters || {};
     const notesMap = new Map((parameters.notas || []).map(note => [note.id, note.valor]));
     const weightsMap = {
@@ -54,10 +52,9 @@ export default async function handler(request, response) {
       técnico: new Map((parameters.técnico || []).map(c => [c.name, c.weight])),
     };
 
-    // 4. Calcula as notas para cada candidatura
+    // Calcula as notas para cada candidatura
     const classifiedApplicants = job.applications.map(app => {
       const scores = { notaTriagem: 0, notaCultura: 0, notaTecnico: 0, notaGeral: 0 };
-
       if (app.evaluation) {
         ['triagem', 'cultura', 'técnico'].forEach(section => {
           let sectionScore = 0;
@@ -79,6 +76,7 @@ export default async function handler(request, response) {
         scores.notaGeral = scores.notaTriagem + scores.notaCultura + scores.notaTecnico;
       }
 
+      // A CORREÇÃO ESTÁ AQUI: O campo 'isHired' foi restaurado
       return {
         applicationId: app.id,
         submissionDate: app.created_at,
@@ -89,7 +87,6 @@ export default async function handler(request, response) {
       };
     });
     
-    // 5. Retorna a lista de candidaturas com as notas calculadas
     return response.status(200).json({ applicants: classifiedApplicants });
 
   } catch (error) {
