@@ -1,4 +1,4 @@
-// src/pages/HiredPage.jsx
+// src/pages/HiredPage.jsx (Versão Corrigida)
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -30,19 +30,14 @@ const HiredPage = () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) throw new Error("Sessão não encontrada.");
-
                 const response = await fetch('/api/getHiredApplicants', {
                     headers: { 'Authorization': `Bearer ${session.access_token}` },
                 });
-
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.error || "Não foi possível buscar os candidatos aprovados.");
                 }
-
                 const data = await response.json();
-
-                // Agrupa os candidatos por vaga
                 const groupedByJob = (data.hired || []).reduce((acc, application) => {
                     const jobTitle = application.job.title;
                     if (!acc[jobTitle]) {
@@ -52,7 +47,6 @@ const HiredPage = () => {
                     return acc;
                 }, {});
                 setHiredData(groupedByJob);
-
             } catch (err) {
                 console.error("Erro ao buscar aprovados:", err);
                 setError(err.message);
@@ -60,19 +54,14 @@ const HiredPage = () => {
                 setLoading(false);
             }
         };
-
         fetchHired();
     }, []);
 
     const formatPhone = (phone) => {
         if (!phone) return 'Não informado';
         const cleaned = phone.replace(/\D/g, '');
-        if (cleaned.length === 11) {
-            return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
-        }
-        if (cleaned.length === 10) {
-            return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 6)}-${cleaned.substring(6)}`;
-        }
+        if (cleaned.length === 11) { return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`; }
+        if (cleaned.length === 10) { return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 6)}-${cleaned.substring(6)}`; }
         return phone;
     };
 
@@ -86,7 +75,6 @@ const HiredPage = () => {
         if (Object.keys(hiredData).length === 0) {
             return <Typography sx={{ mt: 3, textAlign: 'center' }}>Nenhum candidato foi marcado como contratado ainda.</Typography>;
         }
-
         return (
             <Box>
                 {Object.entries(hiredData).map(([jobTitle, applications]) => (
@@ -109,7 +97,8 @@ const HiredPage = () => {
                                                     </Typography>
                                                     <br />
                                                     <Typography component="span" variant="body2" color="text.secondary">
-                                                        Aprovado em: {app.hiredAt ? format(parseISO(app.hiredAt), 'dd/MM/yyyy') : 'N/A'}
+                                                        {/* AQUI ESTÁ A CORREÇÃO DA REGRESSÃO */}
+                                                        Aprovado em: {app.hiredAt ? format(parseISO(app.hiredAt), 'dd/MM/yyyy') : 'Data não registrada'}
                                                     </Typography>
                                                 </>
                                             }

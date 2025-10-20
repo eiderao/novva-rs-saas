@@ -1,4 +1,4 @@
-// api/getPublicJobData.js (Versão com Contagem de Candidatos)
+// api/getPublicJobData.js (VERSÃO FINAL E CORRIGIDA)
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(request, response) {
@@ -13,21 +13,31 @@ export default async function handler(request, response) {
       return response.status(400).json({ error: 'O ID da vaga é obrigatório.' });
     }
 
-    // A CONSULTA AGORA TAMBÉM BUSCA A CONTAGEM DE 'applications'
+    // A CORREÇÃO ESTÁ AQUI: Convertemos o jobId para Number()
     const { data: job, error: jobError } = await supabaseAdmin
       .from('jobs')
       .select(`
         title,
+        tenantId,
         applications ( count )
       `)
-      .eq('id', jobId)
+      .eq('id', Number(jobId)) // Comparando número com número
       .single();
 
     if (jobError) throw jobError;
+
+    const { data: tenant, error: tenantError } = await supabaseAdmin
+      .from('tenants')
+      .select('planId')
+      .eq('id', job.tenantId)
+      .single();
+    
+    if (tenantError) throw tenantError;
     
     const formattedJob = {
       title: job.title,
-      candidateCount: job.applications[0] ? job.applications[0].count : 0
+      candidateCount: job.applications[0] ? job.applications[0].count : 0,
+      planId: tenant.planId
     };
 
     return response.status(200).json({ job: formattedJob });

@@ -1,24 +1,27 @@
-// src/App.jsx
-import HiredPage from './pages/HiredPage.jsx';
+// src/App.jsx (Versão com Rota /admin/tenant/:tenantId)
 import React from 'react';
-import { Routes, Route, Outlet } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
 import LoginPage from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import JobDetails from './pages/JobDetails.jsx';
-import ApplyPage from './pages/ApplyPage.jsx'; // <-- IMPORTAÇÃO DA NOVA PÁGINA
-import LoadingSpinner from './components/common/LoadingSpinner.jsx';
 import ApplicationDetails from './pages/ApplicationDetails.jsx';
+import ApplyPage from './pages/ApplyPage.jsx';
+import HiredPage from './pages/HiredPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
+import AdminTenantPage from './pages/AdminTenantPage.jsx'; // ADICIONADO
+import LoadingSpinner from './components/common/LoadingSpinner.jsx';
 
-// Um componente para agrupar nossas rotas protegidas
+// Agrupa as rotas do usuário padrão
 const ProtectedRoutes = () => (
   <Routes>
     <Route path="/" element={<Dashboard />} />
     <Route path="/vaga/:jobId" element={<JobDetails />} />
-    {/* Futuras rotas protegidas virão aqui */}
-    <Route path="/aprovados" element={<HiredPage />} /> {/* <-- NOVA ROTA */}
     <Route path="/vaga/:jobId/candidato/:applicationId" element={<ApplicationDetails />} />
+    <Route path="/aprovados" element={<HiredPage />} />
+    <Route path="/admin" element={<AdminPage />} />
+    <Route path="/admin/tenant/:tenantId" element={<AdminTenantPage />} /> {/* ADICIONADO */}
   </Routes>
 );
 
@@ -31,10 +34,10 @@ function App() {
 
     return (
         <Routes>
-            {/* ROTA PÚBLICA: Qualquer um pode acessar */}
+            {/* ROTA PÚBLICA */}
             <Route path="/vaga/:jobId/apply" element={<ApplyPage />} />
 
-            {/* ROTAS PRIVADAS: Redireciona para Login ou para as rotas protegidas */}
+            {/* ROTAS PRIVADAS */}
             <Route path="/*" element={currentUser ? <ProtectedRoutes /> : <LoginPage />} />
         </Routes>
     );

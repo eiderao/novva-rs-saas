@@ -1,4 +1,4 @@
-// src/pages/JobDetails.jsx (COMPLETO E CORRIGIDO)
+// src/pages/JobDetails.jsx (VERSÃO FINAL com "Copiar Parâmetros")
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -7,12 +7,117 @@ import {
     Container, Typography, Box, AppBar, Toolbar, Button, CircularProgress, 
     Alert, Paper, Tabs, Tab, TextField, IconButton, Snackbar, InputAdornment,
     List, ListItem, ListItemText, Divider, Grid,
-    Table, TableHead, TableRow, TableCell, TableBody, Checkbox
+    Table, TableHead, TableRow, TableCell, TableBody, Checkbox,
+    Modal, FormControl, InputLabel, Select, MenuItem // Adicionado para o novo Modal
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FileCopyIcon from '@mui/icons-material/FileCopy'; // Adicionado para o novo botão
 import ClassificationChart from '../components/charts/ClassificationChart';
+
+// --- NOVO SUB-COMPONENTE: MODAL DE CÓPIA ---
+const modalStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 500,
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+};
+
+const CopyParametersModal = ({ open, onClose, currentJobId, onCopy }) => {
+  const [jobs, setJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isCopying, setIsCopying] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const fetchJobsList = async () => {
+        setLoading(true);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) throw new Error("Sessão não encontrada.");
+          const response = await fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+          const data = await response.json();
+          // Filtra a lista para mostrar apenas outras vagas ativas
+          const copyableJobs = (data.jobs || []).filter(
+            (job) => job.id.toString() !== currentJobId && job.status === 'active'
+          );
+          setJobs(copyableJobs);
+        } catch (err) {
+          console.error("Erro ao buscar lista de vagas:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchJobsList();
+    }
+  }, [open, currentJobId]);
+
+  const handleConfirmCopy = async () => {
+    if (!selectedJobId) return;
+    setIsCopying(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão não encontrada.");
+      // 1. Busca os parâmetros da vaga selecionada
+      const response = await fetch(`/api/jobs?id=${selectedJobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+      const data = await response.json();
+      if (data.job && data.job.parameters) {
+        // 2. Envia os parâmetros copiados para a página principal
+        onCopy(data.job.parameters);
+      }
+      onClose();
+    } catch (err) {
+      console.error("Erro ao copiar parâmetros:", err);
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <Box sx={modalStyle}>
+        <Typography variant="h6" gutterBottom>Copiar Parâmetros de outra Vaga</Typography>
+        <Typography variant="body2" gutterBottom>
+          Selecione uma vaga ativa para copiar todos os seus parâmetros (Triagem, Cultura, Técnico e Notas) para esta vaga.
+        </Typography>
+        {loading ? (
+          <CircularProgress />
+        ) : (
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel id="copy-job-label">Selecionar Vaga</InputLabel>
+            <Select
+              labelId="copy-job-label"
+              value={selectedJobId}
+              label="Selecionar Vaga"
+              onChange={(e) => setSelectedJobId(e.target.value)}
+            >
+              {jobs.length > 0 ? (
+                jobs.map(job => (
+                  <MenuItem key={job.id} value={job.id}>{job.title}</MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled>Nenhuma outra vaga ativa encontrada.</MenuItem>
+              )}
+            </Select>
+          </FormControl>
+        )}
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button onClick={onClose} disabled={isCopying}>Cancelar</Button>
+          <Button variant="contained" onClick={handleConfirmCopy} disabled={loading || isCopying || !selectedJobId}>
+            {isCopying ? <CircularProgress size={24} /> : 'Copiar'}
+          </Button>
+        </Box>
+      </Box>
+    </Modal>
+  );
+};
+// --- FIM DO NOVO SUB-COMPONENTE ---
 
 const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
   const handleItemChange = (index, field, value) => { const newCriteria = [...criteria]; const numericValue = field === 'weight' ? Number(value) || 0 : value; newCriteria[index] = { ...newCriteria[index], [field]: numericValue }; onCriteriaChange(newCriteria); };
@@ -44,6 +149,7 @@ const JobDetails = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [applicantData, setApplicantData] = useState({ loading: true, data: [], error: null });
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false); // NOVO ESTADO
 
   useEffect(() => {
     const fetchJobDetails = async () => {
@@ -141,6 +247,12 @@ const JobDetails = () => {
   const applicationUrl = `${window.location.origin}/vaga/${jobId}/apply`;
   const handleCopyLink = () => { navigator.clipboard.writeText(applicationUrl); setFeedback({ open: true, message: 'Link copiado!', severity: 'info' }); };
   
+  // NOVO: Handler para os parâmetros copiados
+  const handleParametersCopied = (newParameters) => {
+    setParameters(newParameters);
+    setFeedback({ open: true, message: 'Parâmetros copiados! Clique em "Salvar Parâmetros" para confirmar.', severity: 'info' });
+  };
+  
   const renderContent = () => {
     if (loading) { return <CircularProgress />; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
@@ -177,7 +289,16 @@ const JobDetails = () => {
               )}
             </Box>
             <Box p={3} hidden={tabValue !== 1}>
-               <Typography variant="h5" gutterBottom>Parâmetros de Avaliação</Typography>
+               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <Typography variant="h5" gutterBottom>Parâmetros de Avaliação</Typography>
+                 <Button
+                    variant="outlined"
+                    startIcon={<FileCopyIcon />}
+                    onClick={() => setIsCopyModalOpen(true)}
+                 >
+                    Copiar Parâmetros
+                 </Button>
+               </Box>
                <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Critérios de Triagem</Typography><ParametersSection criteria={parameters.triagem} onCriteriaChange={(newCriteria) => handleParametersChange('triagem', newCriteria)} /></Paper>
                <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Cultura</Typography><ParametersSection criteria={parameters.cultura} onCriteriaChange={(newCriteria) => handleParametersChange('cultura', newCriteria)} /></Paper>
                <Paper variant="outlined" sx={{ p: 2, mt: 2 }}><Typography>Técnico</Typography><ParametersSection criteria={parameters.técnico} onCriteriaChange={(newCriteria) => handleParametersChange('técnico', newCriteria)} /></Paper>
@@ -186,20 +307,12 @@ const JobDetails = () => {
             </Box>
             <Box p={3} hidden={tabValue !== 2}>
               <Typography variant="h5" gutterBottom>Classificação dos Candidatos</Typography>
-              {applicantData.loading ? null : applicantData.data.length > 0 ? <ClassificationChart data={classifiedApplicants} /> : null}
+              {tabValue === 2 && !applicantData.loading && applicantData.data.length > 0 && (
+                <ClassificationChart data={classifiedApplicants} />
+              )}
               {applicantData.loading ? <CircularProgress sx={{mt: 4}} /> : applicantData.error ? <Alert severity="error">{applicantData.error}</Alert> : (
                 <Table sx={{ mt: 4 }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Nome</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Data da Inscrição</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Triagem</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Cultura</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Técnico</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Geral</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Escolhido</TableCell>
-                    </TableRow>
-                  </TableHead>
+                  <TableHead><TableRow><TableCell sx={{ fontWeight: 'bold' }}>Nome</TableCell><TableCell sx={{ fontWeight: 'bold' }}>Data da Inscrição</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Triagem</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Cultura</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Técnico</TableCell><TableCell align="right" sx={{ fontWeight: 'bold' }}>Nota Geral</TableCell><TableCell align="center" sx={{ fontWeight: 'bold' }}>Contratado?</TableCell></TableRow></TableHead>
                   <TableBody>
                     {classifiedApplicants.map(applicant => (
                       <TableRow hover key={applicant.applicationId} sx={{ backgroundColor: applicant.isHired ? '#e8f5e9' : 'transparent' }}>
@@ -231,7 +344,17 @@ const JobDetails = () => {
   return (
     <Box>
       <AppBar position="static"><Toolbar><Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}</Typography><Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button></Toolbar></AppBar>
-      <Container sx={{ mt: 4 }}>{renderContent()}</Container>
+      <Container sx={{ mt: 4 }}>
+        {renderContent()}
+      </Container>
+      
+      <CopyParametersModal 
+        open={isCopyModalOpen}
+        onClose={() => setIsCopyModalOpen(false)}
+        currentJobId={jobId}
+        onCopy={handleParametersCopied}
+      />
+      
       <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}><Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert></Snackbar>
     </Box>
   );

@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx (Versão com API Corrigida)
+// src/pages/Dashboard.jsx (Versão com Botão de Admin Condicional)
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -13,6 +13,8 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
     const [jobs, setJobs] = useState([]);
+    const [planId, setPlanId] = useState(null);
+    const [isAdmin, setIsAdmin] = useState(false); // NOVO ESTADO
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [openCreateModal, setOpenCreateModal] = useState(false);
@@ -23,7 +25,6 @@ const Dashboard = () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Sessão do usuário não encontrada.");
-            // CORREÇÃO APLICADA AQUI:
             const response = await fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
             if (!response.ok) {
                 const errorData = await response.json();
@@ -31,6 +32,8 @@ const Dashboard = () => {
             }
             const data = await response.json();
             setJobs(data.jobs);
+            setPlanId(data.planId);
+            setIsAdmin(data.isAdmin); // SALVA O STATUS DE ADMIN
         } catch (err) {
             console.error("Erro ao buscar vagas:", err);
             setError(err.message);
@@ -46,7 +49,8 @@ const Dashboard = () => {
     const handleLogout = async () => { await supabase.auth.signOut(); };
     const handleRowClick = (jobId) => { navigate(`/vaga/${jobId}`); };
     
-    const isJobLimitReached = jobs.length >= 2;
+    const isFreemium = planId === 'freemium';
+    const isJobLimitReached = isFreemium && jobs.length >= 2;
 
     return (
         <>
@@ -56,6 +60,12 @@ const Dashboard = () => {
                         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                             Novva R&S Dashboard
                         </Typography>
+                        {/* BOTÃO DE ADMIN CONDICIONAL */}
+                        {isAdmin && (
+                            <Button color="inherit" component={RouterLink} to="/admin">
+                                Admin
+                            </Button>
+                        )}
                         <Button color="inherit" onClick={handleLogout}>Sair</Button>
                     </Toolbar>
                 </AppBar>
@@ -66,14 +76,7 @@ const Dashboard = () => {
                             Painel de Vagas
                         </Typography>
                         <Box>
-                            <Button 
-                                variant="outlined" 
-                                color="primary" 
-                                size="large"
-                                component={RouterLink}
-                                to="/aprovados"
-                                sx={{ mr: 2 }}
-                            >
+                            <Button variant="outlined" color="primary" size="large" component={RouterLink} to="/aprovados" sx={{ mr: 2 }}>
                                 Ver Aprovados
                             </Button>
                             <Button 
