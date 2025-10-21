@@ -133,7 +133,7 @@ const ApplicationDetails = () => {
     if (application && evaluation) {
       const { candidate, job, formData } = application;
       const displayFields = [
-        { key: 'preferredName', label: 'Como prefere ser chamado?' }, 
+        { key: 'preferredName', label: 'Como prefere ser chamado(a)?' }, 
         { key: 'birthDate', label: 'Data de Nascimento', format: formatDate },
         { key: 'state', label: 'Estado' }, 
         { key: 'city', label: 'Cidade' },
