@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx (Versão com Ordenação de Vagas)
+// src/pages/Dashboard.jsx (Versão com Status Traduzido)
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -8,6 +8,7 @@ import {
     Box, Button, Typography, Container, AppBar, Toolbar, CircularProgress, 
     Table, TableBody, TableCell, TableHead, TableRow, Paper, Alert
 } from '@mui/material';
+import { formatStatus } from '../utils/formatters'; // IMPORTA NOSSO TRADUTOR
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -31,14 +32,11 @@ const Dashboard = () => {
                 throw new Error(errorData.error || 'Falha ao buscar vagas do servidor.');
             }
             const data = await response.json();
-
-            // AQUI ESTÁ A LÓGICA DE ORDENAÇÃO
             const sortedJobs = (data.jobs || []).sort((a, b) => {
                 if (a.status === 'active' && b.status !== 'active') return -1;
                 if (a.status !== 'active' && b.status === 'active') return 1;
-                return 0; // Mantém a ordem original se ambos forem 'active' ou ambos 'inactive'
+                return 0;
             });
-
             setJobs(sortedJobs);
             setPlanId(data.planId);
             setIsAdmin(data.isAdmin);
@@ -76,7 +74,6 @@ const Dashboard = () => {
                         <Button color="inherit" onClick={handleLogout}>Sair</Button>
                     </Toolbar>
                 </AppBar>
-
                 <Container sx={{ mt: 4 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
                         <Typography variant="h4" component="h1">
@@ -97,16 +94,13 @@ const Dashboard = () => {
                             </Button>
                         </Box>
                     </Box>
-
                     {isJobLimitReached && (
                         <Alert severity="info" sx={{ mb: 2 }}>
                             Você atingiu o limite de 2 vagas para o plano freemium.
                         </Alert>
                     )}
-
                     {loading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>}
                     {error && <Typography color="error" align="center">Erro: {error}</Typography>}
-                    
                     {!loading && !error && (
                         <Paper sx={{ width: '100%', overflow: 'hidden' }}>
                             <Table>
@@ -125,13 +119,13 @@ const Dashboard = () => {
                                             onClick={() => handleRowClick(job.id)}
                                             sx={{ 
                                                 cursor: 'pointer',
-                                                // Aplica um estilo mais suave para vagas inativas
                                                 backgroundColor: job.status !== 'active' ? '#f5f5f5' : 'transparent',
                                                 color: job.status !== 'active' ? '#9e9e9e' : 'inherit'
                                             }}
                                         >
                                             <TableCell>{job.title}</TableCell>
-                                            <TableCell sx={{ textTransform: 'capitalize' }}>{job.status}</TableCell>
+                                            {/* CORREÇÃO APLICADA AQUI */}
+                                            <TableCell sx={{ textTransform: 'capitalize' }}>{formatStatus(job.status)}</TableCell>
                                             <TableCell align="center">{job.candidateCount || 0}</TableCell>
                                         </TableRow>
                                     )) : (

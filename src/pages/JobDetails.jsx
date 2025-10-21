@@ -1,4 +1,4 @@
-// src/pages/JobDetails.jsx (VERSÃO FINAL com importação de Modal corrigida)
+// src/pages/JobDetails.jsx (VERSÃO FINAL com Status Traduzido)
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -8,7 +8,7 @@ import {
     Alert, Paper, Tabs, Tab, TextField, IconButton, Snackbar, InputAdornment,
     List, ListItem, ListItemText, Divider, Grid,
     Table, TableHead, TableRow, TableCell, TableBody, Checkbox,
-    FormControl, InputLabel, Select, MenuItem, Modal, // <-- A CORREÇÃO ESTÁ AQUI
+    FormControl, InputLabel, Select, MenuItem, Modal,
     Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -16,6 +16,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import ClassificationChart from '../components/charts/ClassificationChart';
+import { formatStatus } from '../utils/formatters'; // IMPORTA NOSSO TRADUTOR
 
 const modalStyle = {
   position: 'absolute',
@@ -304,8 +305,9 @@ const JobDetails = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Box>
                 <Typography variant="h4">{job.title}</Typography>
+                {/* CORREÇÃO APLICADA AQUI */}
                 <Typography variant="subtitle1" color="text.secondary" gutterBottom sx={{ textTransform: 'capitalize' }}>
-                  Status: {job.status}
+                  Status: {formatStatus(job.status)}
                 </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -318,6 +320,7 @@ const JobDetails = () => {
                     onChange={handleStatusChange}
                     disabled={isSaving}
                   >
+                    {/* CORREÇÃO APLICADA AQUI */}
                     <MenuItem value="active">Ativa</MenuItem>
                     <MenuItem value="inactive">Inativa</MenuItem>
                     <MenuItem value="filled">Preenchida</MenuItem>
@@ -418,14 +421,7 @@ const JobDetails = () => {
 
   return (
     <Box>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            {job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}
-          </Typography>
-          <Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button>
-        </Toolbar>
-      </AppBar>
+      <AppBar position="static"><Toolbar><Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}</Typography><Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button></Toolbar></AppBar>
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
@@ -452,11 +448,7 @@ const JobDetails = () => {
         </DialogActions>
       </Dialog>
       
-      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
-        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
-          {feedback.message}
-        </Alert>
-      </Snackbar>
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}><Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert></Snackbar>
     </Box>
   );
 };
