@@ -1,4 +1,4 @@
-// src/pages/JobDetails.jsx (VERSÃO FINAL COMPLETA)
+// src/pages/JobDetails.jsx (VERSÃO FINAL com importação de Modal corrigida)
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase/client';
@@ -8,7 +8,7 @@ import {
     Alert, Paper, Tabs, Tab, TextField, IconButton, Snackbar, InputAdornment,
     List, ListItem, ListItemText, Divider, Grid,
     Table, TableHead, TableRow, TableCell, TableBody, Checkbox,
-    FormControl, InputLabel, Select, MenuItem,
+    FormControl, InputLabel, Select, MenuItem, Modal, // <-- A CORREÇÃO ESTÁ AQUI
     Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -418,16 +418,25 @@ const JobDetails = () => {
 
   return (
     <Box>
-      <AppBar position="static"><Toolbar><Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}</Typography><Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button></Toolbar></AppBar>
+      <AppBar position="static">
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            {job ? `Vaga: ${job.title}` : 'Carregando Vaga...'}
+          </Typography>
+          <Button color="inherit" component={RouterLink} to="/">Voltar para o Painel</Button>
+        </Toolbar>
+      </AppBar>
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
+      
       <CopyParametersModal 
         open={isCopyModalOpen}
         onClose={() => setIsCopyModalOpen(false)}
         currentJobId={jobId}
         onCopy={handleParametersCopied}
       />
+      
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
         <DialogTitle>Confirmar Exclusão</DialogTitle>
         <DialogContent>
@@ -442,7 +451,12 @@ const JobDetails = () => {
           </Button>
         </DialogActions>
       </Dialog>
-      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}><Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert></Snackbar>
+      
+      <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}>
+        <Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>
+          {feedback.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
