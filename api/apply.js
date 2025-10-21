@@ -1,4 +1,4 @@
-// api/apply.js (VERSÃO FINAL, AGORA COM A VERIFICAÇÃO DE PLANO)
+// api/apply.js (VERSÃO FINAL, COMPLETA E CORRIGIDA)
 import { createClient } from '@supabase/supabase-js';
 import { formidable } from 'formidable';
 import fs from 'fs';
@@ -50,10 +50,7 @@ export default async function handler(request, response) {
       .eq('id', tenant.planId)
       .single();
     
-    if (planError) throw planError;
-    
-    // AQUI ESTÁ A CORREÇÃO QUE FALTOU NA ÚLTIMA VEZ
-    if (!plan) {
+    if (planError || !plan) {
       throw new Error(`Configuração de plano inválida. O plano com ID "${tenant.planId}" não foi encontrado na tabela 'plans'.`);
     }
     
@@ -69,7 +66,6 @@ export default async function handler(request, response) {
     }
     // --- FIM DA LÓGICA DE LIMITE ---
 
-    // Lógica de processamento da candidatura (sem alterações)
     const { name, email } = fields;
     const resumeFile = files.resume;
     if (!name || !email || !resumeFile) { return response.status(400).json({ error: 'Nome, e-mail e currículo são obrigatórios.' }); }
