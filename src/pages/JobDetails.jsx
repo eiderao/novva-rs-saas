@@ -1,6 +1,6 @@
-// src/pages/JobDetails.jsx (VERSÃO FINAL com "Copiar Parâmetros")
+// src/pages/JobDetails.jsx (VERSÃO FINAL COMPLETA)
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
+import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase/client';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -8,15 +8,15 @@ import {
     Alert, Paper, Tabs, Tab, TextField, IconButton, Snackbar, InputAdornment,
     List, ListItem, ListItemText, Divider, Grid,
     Table, TableHead, TableRow, TableCell, TableBody, Checkbox,
-    Modal, FormControl, InputLabel, Select, MenuItem // Adicionado para o novo Modal
+    FormControl, InputLabel, Select, MenuItem,
+    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FileCopyIcon from '@mui/icons-material/FileCopy'; // Adicionado para o novo botão
+import FileCopyIcon from '@mui/icons-material/FileCopy';
 import ClassificationChart from '../components/charts/ClassificationChart';
 
-// --- NOVO SUB-COMPONENTE: MODAL DE CÓPIA ---
 const modalStyle = {
   position: 'absolute',
   top: '50%',
@@ -43,7 +43,6 @@ const CopyParametersModal = ({ open, onClose, currentJobId, onCopy }) => {
           if (!session) throw new Error("Sessão não encontrada.");
           const response = await fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${session.access_token}` } });
           const data = await response.json();
-          // Filtra a lista para mostrar apenas outras vagas ativas
           const copyableJobs = (data.jobs || []).filter(
             (job) => job.id.toString() !== currentJobId && job.status === 'active'
           );
@@ -64,11 +63,9 @@ const CopyParametersModal = ({ open, onClose, currentJobId, onCopy }) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sessão não encontrada.");
-      // 1. Busca os parâmetros da vaga selecionada
       const response = await fetch(`/api/jobs?id=${selectedJobId}`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
       const data = await response.json();
       if (data.job && data.job.parameters) {
-        // 2. Envia os parâmetros copiados para a página principal
         onCopy(data.job.parameters);
       }
       onClose();
@@ -117,7 +114,6 @@ const CopyParametersModal = ({ open, onClose, currentJobId, onCopy }) => {
     </Modal>
   );
 };
-// --- FIM DO NOVO SUB-COMPONENTE ---
 
 const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
   const handleItemChange = (index, field, value) => { const newCriteria = [...criteria]; const numericValue = field === 'weight' ? Number(value) || 0 : value; newCriteria[index] = { ...newCriteria[index], [field]: numericValue }; onCriteriaChange(newCriteria); };
@@ -141,6 +137,7 @@ const ParametersSection = ({ criteria = [], onCriteriaChange }) => {
 
 const JobDetails = () => {
   const { jobId } = useParams();
+  const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [parameters, setParameters] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -149,7 +146,9 @@ const JobDetails = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [applicantData, setApplicantData] = useState({ loading: true, data: [], error: null });
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false); // NOVO ESTADO
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchJobDetails = async () => {
@@ -246,25 +245,101 @@ const JobDetails = () => {
   const handleCloseFeedback = () => { setFeedback({ open: false, message: '' }); };
   const applicationUrl = `${window.location.origin}/vaga/${jobId}/apply`;
   const handleCopyLink = () => { navigator.clipboard.writeText(applicationUrl); setFeedback({ open: true, message: 'Link copiado!', severity: 'info' }); };
-  
-  // NOVO: Handler para os parâmetros copiados
   const handleParametersCopied = (newParameters) => {
     setParameters(newParameters);
     setFeedback({ open: true, message: 'Parâmetros copiados! Clique em "Salvar Parâmetros" para confirmar.', severity: 'info' });
   };
   
+  const handleStatusChange = async (event) => {
+    const newStatus = event.target.value;
+    const oldStatus = job.status;
+    setJob(prev => ({ ...prev, status: newStatus }));
+    setIsSaving(true);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Sessão não encontrada.");
+        const response = await fetch('/api/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ action: 'updateJobStatus', jobId: jobId, newStatus: newStatus })
+        });
+        if (!response.ok) throw new Error("Não foi possível atualizar o status.");
+        setFeedback({ open: true, message: 'Status atualizado!', severity: 'success' });
+    } catch (err) {
+        console.error(err);
+        setFeedback({ open: true, message: 'Erro ao atualizar status.', severity: 'error' });
+        setJob(prev => ({ ...prev, status: oldStatus })); 
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleDeleteJob = async () => {
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão não encontrada.");
+      const response = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ action: 'deleteJob', jobId: jobId })
+      });
+      if (!response.ok) throw new Error("Não foi possível excluir a vaga.");
+      setOpenDeleteDialog(false);
+      navigate('/');
+    } catch (err) {
+      console.error(err);
+      setFeedback({ open: true, message: 'Erro ao excluir vaga.', severity: 'error' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
   const renderContent = () => {
-    if (loading) { return <CircularProgress />; }
+    if (loading) { return <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>; }
     if (error) { return <Alert severity="error">{error}</Alert>; }
     if (job && parameters) {
       return (
         <>
-          <Typography variant="h4">{job.title}</Typography>
-          <Typography variant="subtitle1" color="text.secondary" gutterBottom>Status: {job.status}</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+            <Box>
+                <Typography variant="h4">{job.title}</Typography>
+                <Typography variant="subtitle1" color="text.secondary" gutterBottom sx={{ textTransform: 'capitalize' }}>
+                  Status: {job.status}
+                </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <FormControl sx={{ minWidth: 150 }} size="small">
+                  <InputLabel id="status-select-label">Alterar Status</InputLabel>
+                  <Select
+                    labelId="status-select-label"
+                    value={job.status}
+                    label="Alterar Status"
+                    onChange={handleStatusChange}
+                    disabled={isSaving}
+                  >
+                    <MenuItem value="active">Ativa</MenuItem>
+                    <MenuItem value="inactive">Inativa</MenuItem>
+                    <MenuItem value="filled">Preenchida</MenuItem>
+                  </Select>
+                </FormControl>
+                <Button 
+                  variant="outlined" 
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => setOpenDeleteDialog(true)}
+                  disabled={isDeleting}
+                >
+                  Excluir Vaga
+                </Button>
+            </Box>
+          </Box>
+          
           <Box sx={{ mt: 4, mb: 4 }}>
             <Typography variant="h6" gutterBottom>Link Público de Candidatura</Typography>
             <TextField fullWidth variant="outlined" value={applicationUrl} InputProps={{ readOnly: true, endAdornment: ( <InputAdornment position="end"><IconButton onClick={handleCopyLink}><ContentCopyIcon /></IconButton></InputAdornment> )}}/>
           </Box>
+          
           <Paper sx={{ width: '100%' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs value={tabValue} onChange={handleTabChange}>
@@ -347,14 +422,26 @@ const JobDetails = () => {
       <Container sx={{ mt: 4 }}>
         {renderContent()}
       </Container>
-      
       <CopyParametersModal 
         open={isCopyModalOpen}
         onClose={() => setIsCopyModalOpen(false)}
         currentJobId={jobId}
         onCopy={handleParametersCopied}
       />
-      
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+        <DialogTitle>Confirmar Exclusão</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Você tem certeza que deseja excluir a vaga <strong>"{job?.title}"</strong>? Esta ação é irreversível e excluirá todas as candidaturas e avaliações associadas.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)} disabled={isDeleting}>Cancelar</Button>
+          <Button onClick={handleDeleteJob} color="error" disabled={isDeleting}>
+            {isDeleting ? <CircularProgress size={24} /> : 'Excluir'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Snackbar open={feedback.open} autoHideDuration={4000} onClose={handleCloseFeedback}><Alert onClose={handleCloseFeedback} severity={feedback.severity} sx={{ width: '100%' }}>{feedback.message}</Alert></Snackbar>
     </Box>
   );
