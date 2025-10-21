@@ -134,7 +134,7 @@ const ApplyPage = () => {
         <Typography variant="h6" color="text.secondary">{jobTitle}</Typography>
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 3, borderTop: '1px solid #ddd', pt: 3 }}>
           <TextField name="name" label="Nome Completo" required fullWidth margin="normal" onChange={handleInputChange} />
-          <TextField name="preferredName" label="Como você prefere ser chamado?" fullWidth margin="normal" onChange={handleInputChange} />
+          <TextField name="preferredName" label="Como você prefere ser chamado(a)?" fullWidth margin="normal" onChange={handleInputChange} />
           <TextField name="email" label="Seu melhor e-mail" type="email" required fullWidth margin="normal" onChange={handleInputChange} />
           <TextField name="phone" label="Número de telefone (celular)" type="tel" required fullWidth margin="normal" onChange={handleInputChange} />
           <DatePicker label="Data de Nascimento" sx={{ width: '100%', mt: 2, mb: 1 }} value={formState.birthDate} onChange={handleDateChange} />
