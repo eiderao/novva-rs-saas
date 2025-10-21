@@ -1,4 +1,4 @@
-// src/pages/ApplyPage.jsx (VERSÃO FINAL, COMPLETA E CORRIGIDA)
+// src/pages/ApplyPage.jsx (VERSÃO FINAL, COMPLETA E CORRIGIDA - 192 LINHAS)
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
@@ -151,8 +151,12 @@ const ApplyPage = () => {
           <Button variant="outlined" component="label" sx={{ mt: 2, mb: 1, width: '100%' }}>Anexe o seu currículo (PDF, DOC, DOCX)<input type="file" hidden required accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleFileChange} /></Button>
           {resumeFile && <Typography variant="body2" textAlign="center" color="text.secondary">{resumeFile.name}</Typography>}
           
-          {/* AQUI ESTAVA O ERRO DE SINTAXE (FALTAVA FECHAR A TAG) */}
-          {feedback.type && <Alert severity={feedback.type} sx={{ mt: 2 }}>{feedback.message}</Alert>}
+          {/* AQUI ESTÁ O CÓDIGO CORRETO E COMPLETO QUE FALTAVA */}
+          {feedback.type && (
+            <Alert severity={feedback.type} sx={{ mt: 2 }}>
+              {feedback.message}
+            </Alert>
+          )}
           
           <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 3, mb: 2 }} disabled={isSubmitting}>{isSubmitting ? <CircularProgress size={24} /> : 'Enviar Candidatura'}</Button>
         </Box>
