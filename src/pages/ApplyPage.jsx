@@ -191,7 +191,7 @@ const ApplyPage = () => {
           </Button>
           {resumeFile && <Typography variant="body2" textAlign="center" color="text.secondary">{resumeFile.name}</Typography>}
           
-          {feedback.type && (<Alert severity={feedback.type} sx={{ mt: 2 }}>{feedback.message}</Alert>})
+          {feedback.type && <Alert severity={feedback.type} sx={{ mt: 2 }}>{feedback.message}</Alert>}
           <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 3, mb: 2 }} disabled={isSubmitting}>
             {isSubmitting ? <CircularProgress size={24} /> : 'Enviar Candidatura'}
           </Button>
