@@ -150,7 +150,10 @@ const ApplyPage = () => {
           <TextField name="githubProfile" label="Link do seu perfil no GitHub" fullWidth margin="normal" onChange={handleInputChange} />
           <Button variant="outlined" component="label" sx={{ mt: 2, mb: 1, width: '100%' }}>Anexe o seu currículo (PDF, DOC, DOCX)<input type="file" hidden required accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleFileChange} /></Button>
           {resumeFile && <Typography variant="body2" textAlign="center" color="text.secondary">{resumeFile.name}</Typography>}
+          
+          {/* AQUI ESTAVA O ERRO DE SINTAXE (FALTAVA FECHAR A TAG) */}
           {feedback.type && <Alert severity={feedback.type} sx={{ mt: 2 }}>{feedback.message}</Alert>}
+          
           <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 3, mb: 2 }} disabled={isSubmitting}>{isSubmitting ? <CircularProgress size={24} /> : 'Enviar Candidatura'}</Button>
         </Box>
       </Box>
