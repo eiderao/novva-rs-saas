@@ -1,4 +1,6 @@
 // src/pages/ApplicationDetails.jsx (VERSÃO FINAL, COMPLETA E CORRIGIDA)
+import EvaluationDashboardV2 from '../components/evaluation_v2/EvaluationDashboardV2';
+import { useAuth } from '../context/AuthContext'; // Para pegar o usuário logado
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../supabase/client';
